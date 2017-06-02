@@ -1,0 +1,2293 @@
+1. Missing null check after memory allocation
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:306: error: NULL_DEREFERENCE
+  pointer `*ESIofSymbols` last assigned on line 284 could be null and is dereferenced at line 306, column 5
+  304.   			/* parity packet */
+  305.   			for (j = 0; j < m_nbSymbolsPerPkt; j++) {	
+  306. > 				(*ESIofSymbols)[j] = m_nbSourceSymbols 
+  307.   						+ m_txseqToESI[(j + m_ESItoTxseq[ESIofFirstSymbol
+  308.   								- m_nbSourceSymbols]) % m_nbParitySymbols];
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:300: error: NULL_DEREFERENCE
+  pointer `*ESIofSymbols` last assigned on line 284 could be null and is dereferenced at line 300, column 5
+  298.   			/* source packet */
+  299.   			for (j = 0; j < m_nbSymbolsPerPkt; j++) {
+  300. > 				(*ESIofSymbols)[j] = (ESIofFirstSymbol + j) % m_nbSourceSymbols;
+  301.   				(*GeneratedSymbols)[j] = ((char*)pktBuffer) + j * m_symbolSize;
+  302.   			}
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:292: error: NULL_DEREFERENCE
+  pointer `*GeneratedSymbols` last assigned on line 285 could be null and is dereferenced at line 292, column 3
+  290.   		 */
+  291.   		(*ESIofSymbols)[0] = ESIofFirstSymbol;
+  292. > 		(*GeneratedSymbols)[0] = pktBuffer;
+  293.   	} else {
+  294.   		/*
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:291: error: NULL_DEREFERENCE
+  pointer `*ESIofSymbols` last assigned on line 284 could be null and is dereferenced at line 291, column 3
+  289.   		 * simple case, one symbol per packet
+  290.   		 */
+  291. > 		(*ESIofSymbols)[0] = ESIofFirstSymbol;
+  292.   		(*GeneratedSymbols)[0] = pktBuffer;
+  293.   	} else {
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:301: error: NULL_DEREFERENCE
+  pointer `*GeneratedSymbols` last assigned on line 285 could be null and is dereferenced at line 301, column 5
+  299.   			for (j = 0; j < m_nbSymbolsPerPkt; j++) {
+  300.   				(*ESIofSymbols)[j] = (ESIofFirstSymbol + j) % m_nbSourceSymbols;
+  301. > 				(*GeneratedSymbols)[j] = ((char*)pktBuffer) + j * m_symbolSize;
+  302.   			}
+  303.   		} else { 
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:309: error: NULL_DEREFERENCE
+  pointer `*GeneratedSymbols` last assigned on line 285 could be null and is dereferenced at line 309, column 5
+  307.   						+ m_txseqToESI[(j + m_ESItoTxseq[ESIofFirstSymbol
+  308.   								- m_nbSourceSymbols]) % m_nbParitySymbols];
+  309. > 				(*GeneratedSymbols)[j] = ((char*)pktBuffer) + j * m_symbolSize;
+  310.   			}
+  311.   		}
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:186: error: NULL_DEREFERENCE
+  pointer `m_ESItoTxseq` last assigned on line 182 could be null and is dereferenced at line 186, column 4
+  184.   
+  185.   		for(int i = 0; i < m_nbParitySymbols; i++) {
+  186. > 			m_ESItoTxseq[i] = i;
+  187.   			m_txseqToESI[i] = i;
+  188.   		}
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:187: error: NULL_DEREFERENCE
+  pointer `m_txseqToESI` last assigned on line 183 could be null and is dereferenced at line 187, column 4
+  185.   		for(int i = 0; i < m_nbParitySymbols; i++) {
+  186.   			m_ESItoTxseq[i] = i;
+  187. > 			m_txseqToESI[i] = i;
+  188.   		}
+  189.   		for(int i = 0; i < m_nbParitySymbols; i++) {
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/lcm_tunnel.h:53: error: NULL_DEREFERENCE
+  pointer `sub_msg` last assigned on line 52 could be null and is dereferenced at line 53, column 5
+  51.     TunnelLcmMessage(const lcm_recv_buf_t *rbuf, const char *chan){
+  52.       sub_msg = (lcm_tunnel_sub_msg_t *) malloc(sizeof(lcm_tunnel_sub_msg_t));
+  53. >     sub_msg->channel= strdup(chan);
+  54.       recv_utime = rbuf->recv_utime;
+  55.       sub_msg->data_size = rbuf->data_size;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/lcm_tunnel.h:57: error: NULL_DEREFERENCE
+  pointer `sub_msg->data` last assigned on line 56 could be null and is dereferenced by call to `memcpy()` at line 57, column 5
+  55.       sub_msg->data_size = rbuf->data_size;
+  56.       sub_msg->data = (uint8_t *)malloc(sub_msg->data_size);
+  57. >     memcpy(sub_msg->data,rbuf->data,sub_msg->data_size);
+  58.       encoded_size = lcm_tunnel_sub_msg_t_encoded_size(sub_msg);
+  59.     }
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:691: error: NULL_DEREFERENCE
+  pointer `param` last assigned on line 690 could be null and is dereferenced at line 691, column 3
+  689.     BotParam * param;
+  690.     param = calloc(1, sizeof(BotParam));
+  691. >   param->root = root;
+  692.     param->lock = g_mutex_new();
+  693.     param->server_id = -1;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_python.c:677: error: NULL_DEREFERENCE
+  pointer `pc` last assigned on line 676 could be null and is dereferenced at line 677, column 5
+  675.   {
+  676.       _package_contents_t *pc = (_package_contents_t *) malloc (sizeof(_package_contents_t));
+  677. >     pc->enums = g_ptr_array_new ();
+  678.       pc->structs = g_ptr_array_new ();
+  679.       pc->name = strdup (name);
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_lua.c:736: error: NULL_DEREFERENCE
+  pointer `pc` last assigned on line 735 could be null and is dereferenced at line 736, column 5
+  734.   {
+  735.       _package_contents_t *pc = (_package_contents_t *) malloc (sizeof(_package_contents_t));
+  736. >     pc->enums = g_ptr_array_new ();
+  737.       pc->structs = g_ptr_array_new ();
+  738.       pc->name = strdup (name);
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_c.c:53: error: NULL_DEREFERENCE
+  pointer `p` last assigned on line 52 could be null and is dereferenced by call to `sprintf()` at line 53, column 5
+  51.   
+  52.       char *p = (char *) malloc(l + 2);
+  53. >     sprintf(p, "%s ", s);
+  54.   
+  55.       return p;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:420: error: NULL_DEREFERENCE
+  pointer `el->values` last assigned on line 419 could be null and is dereferenced at line 420, column 3
+  418.     int n = el->num_values;
+  419.     el->values = realloc(el->values, (n + 1) * sizeof(char *));
+  420. >   el->values[n] = strdup(str);
+  421.     el->num_values = n + 1;
+  422.     return 0;
+
+/Users/kihongh/project/drake-distro/externals/bullet/src/Bullet3OpenCL/Initialize/b3OpenCLUtils.cpp:338: error: NULL_DEREFERENCE
+  pointer `platforms` last assigned on line 323 could be null and is dereferenced at line 338, column 34
+  336.   		{
+  337.   			char pbuf[128];
+  338. > 			ciErrNum = clGetPlatformInfo(	platforms[i],
+  339.   				CL_PLATFORM_VENDOR,
+  340.   				sizeof(pbuf),
+
+/Users/kihongh/project/drake-distro/externals/bullet/src/Bullet3OpenCL/Initialize/b3OpenCLUtils.cpp:419: error: NULL_DEREFERENCE
+  pointer `cdDevices` last assigned on line 415 could be null and is dereferenced at line 419, column 11
+  417.   	clGetContextInfo(cxMainContext, CL_CONTEXT_DEVICES, szParmDataBytes, cdDevices, NULL);
+  418.   
+  419. > 	device = cdDevices[deviceIndex];
+  420.   	free(cdDevices);
+  421.   
+
+/Users/kihongh/project/drake-distro/externals/bullet/src/Bullet3OpenCL/Initialize/b3OpenCLUtils.cpp:186: error: NULL_DEREFERENCE
+  pointer `platforms` last assigned on line 177 could be null and is dereferenced at line 186, column 14
+  184.   		}
+  185.   
+  186. > 		platform = platforms[platformIndex];
+  187.   
+  188.   		free (platforms);
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:162: error: NULL_DEREFERENCE
+  pointer `params->dist_vals` last assigned on line 161 could be null and is dereferenced by call to `memcpy()` at line 162, column 5
+  160.       params->num_dist = num_dist;
+  161.       params->dist_vals = (double*)malloc(num_dist*sizeof(double));
+  162. >     memcpy(params->dist_vals, dist_vals, num_dist*sizeof(double));
+  163.       params->dist_step = dist_step;
+  164.       params->dist_max = dist_step * num_dist;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:160: error: NULL_DEREFERENCE
+  pointer `params` last assigned on line 158 could be null and is dereferenced at line 160, column 5
+  158.       AngularLookupDistortionParams *params = (AngularLookupDistortionParams*)
+  159.           calloc(1, sizeof(AngularLookupDistortionParams));
+  160. >     params->num_dist = num_dist;
+  161.       params->dist_vals = (double*)malloc(num_dist*sizeof(double));
+  162.       memcpy(params->dist_vals, dist_vals, num_dist*sizeof(double));
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:167: error: NULL_DEREFERENCE
+  pointer `params->undist_vals` last assigned on line 166 could be null and is dereferenced by call to `memcpy()` at line 167, column 5
+  165.       params->num_undist = num_undist;
+  166.       params->undist_vals = (double*)malloc(num_undist*sizeof(double));
+  167. >     memcpy(params->undist_vals, undist_vals, num_undist*sizeof(double));
+  168.       params->undist_step = undist_step;
+  169.       params->undist_max = undist_step * num_undist;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:174: error: NULL_DEREFERENCE
+  pointer `funcs` last assigned on line 173 could be null and is dereferenced at line 174, column 5
+  172.   
+  173.       BotDistortionFuncs *funcs = (BotDistortionFuncs*)calloc(1, sizeof(BotDistortionFuncs));
+  174. >     funcs->dist_func = angular_lookup_distort_func;
+  175.       funcs->undist_func = angular_lookup_undistort_func;
+  176.       funcs->destroy_func = angular_lookup_distortion_destroy;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:267: error: NULL_DEREFERENCE
+  pointer `dist` last assigned on line 260 could be null and is dereferenced at line 267, column 5
+  265.       params->coeffs = calloc(num_coeffs, sizeof(double));
+  266.       memcpy(params->coeffs, coeffs, num_coeffs*sizeof(double));
+  267. >     dist->params = (void*)params;
+  268.   
+  269.       BotDistortionFuncs *funcs = (BotDistortionFuncs*)calloc(1, sizeof(BotDistortionFuncs));
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:266: error: NULL_DEREFERENCE
+  pointer `params->coeffs` last assigned on line 265 could be null and is dereferenced by call to `memcpy()` at line 266, column 5
+  264.       params->num_coeffs = num_coeffs;
+  265.       params->coeffs = calloc(num_coeffs, sizeof(double));
+  266. >     memcpy(params->coeffs, coeffs, num_coeffs*sizeof(double));
+  267.       dist->params = (void*)params;
+  268.   
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:270: error: NULL_DEREFERENCE
+  pointer `funcs` last assigned on line 269 could be null and is dereferenced at line 270, column 5
+  268.   
+  269.       BotDistortionFuncs *funcs = (BotDistortionFuncs*)calloc(1, sizeof(BotDistortionFuncs));
+  270. >     funcs->dist_func = angular_poly_distort_func;
+  271.       funcs->undist_func = angular_poly_undistort_func;
+  272.       funcs->destroy_func = angular_poly_distortion_destroy;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:264: error: NULL_DEREFERENCE
+  pointer `params` last assigned on line 263 could be null and is dereferenced at line 264, column 5
+  262.   
+  263.       AngularPolyDistortionParams *params = (AngularPolyDistortionParams*)calloc(1, sizeof(AngularPolyDistortionParams));
+  264. >     params->num_coeffs = num_coeffs;
+  265.       params->coeffs = calloc(num_coeffs, sizeof(double));
+  266.       memcpy(params->coeffs, coeffs, num_coeffs*sizeof(double));
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:459: error: NULL_DEREFERENCE
+  pointer `self` last assigned on line 454 could be null and is dereferenced at line 459, column 5
+  457.       if(name) 
+  458.           self->name = strdup(name);
+  459. >     self->width = width;
+  460.       self->height = height;
+  461.   
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:458: error: NULL_DEREFERENCE
+  pointer `self` last assigned on line 454 could be null and is dereferenced at line 458, column 9
+  456.   
+  457.       if(name) 
+  458. >         self->name = strdup(name);
+  459.       self->width = width;
+  460.       self->height = height;
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_atlas_command_t.c:433: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 431 could be null and is dereferenced at line 433, column 5
+  431.       bot_core_atlas_command_t_subscription_t *n = (bot_core_atlas_command_t_subscription_t*)
+  432.                          malloc(sizeof(bot_core_atlas_command_t_subscription_t));
+  433. >     n->user_handler = f;
+  434.       n->userdata = userdata;
+  435.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_force_torque_t.c:316: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 314 could be null and is dereferenced at line 316, column 5
+  314.       bot_core_force_torque_t_subscription_t *n = (bot_core_force_torque_t_subscription_t*)
+  315.                          malloc(sizeof(bot_core_force_torque_t_subscription_t));
+  316. >     n->user_handler = f;
+  317.       n->userdata = userdata;
+  318.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_gps_data_t.c:342: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 340 could be null and is dereferenced at line 342, column 5
+  340.       bot_core_gps_data_t_subscription_t *n = (bot_core_gps_data_t_subscription_t*)
+  341.                          malloc(sizeof(bot_core_gps_data_t_subscription_t));
+  342. >     n->user_handler = f;
+  343.       n->userdata = userdata;
+  344.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_gps_satellite_info_list_t.c:228: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 226 could be null and is dereferenced at line 228, column 5
+  226.       bot_core_gps_satellite_info_list_t_subscription_t *n = (bot_core_gps_satellite_info_list_t_subscription_t*)
+  227.                          malloc(sizeof(bot_core_gps_satellite_info_list_t_subscription_t));
+  228. >     n->user_handler = f;
+  229.       n->userdata = userdata;
+  230.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_gps_satellite_info_t.c:303: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 301 could be null and is dereferenced at line 303, column 5
+  301.       bot_core_gps_satellite_info_t_subscription_t *n = (bot_core_gps_satellite_info_t_subscription_t*)
+  302.                          malloc(sizeof(bot_core_gps_satellite_info_t_subscription_t));
+  303. >     n->user_handler = f;
+  304.       n->userdata = userdata;
+  305.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_image_metadata_t.c:228: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 226 could be null and is dereferenced at line 228, column 5
+  226.       bot_core_image_metadata_t_subscription_t *n = (bot_core_image_metadata_t_subscription_t*)
+  227.                          malloc(sizeof(bot_core_image_metadata_t_subscription_t));
+  228. >     n->user_handler = f;
+  229.       n->userdata = userdata;
+  230.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_image_sync_t.c:144: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 143 could be null and is dereferenced by call to `__bot_core_image_sync_t_clone_array()` at line 144, column 5
+  142.   {
+  143.       bot_core_image_sync_t *q = (bot_core_image_sync_t*) malloc(sizeof(bot_core_image_sync_t));
+  144. >     __bot_core_image_sync_t_clone_array(p, q, 1);
+  145.       return q;
+  146.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_image_sync_t.c:199: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 197 could be null and is dereferenced at line 199, column 5
+  197.       bot_core_image_sync_t_subscription_t *n = (bot_core_image_sync_t_subscription_t*)
+  198.                          malloc(sizeof(bot_core_image_sync_t_subscription_t));
+  199. >     n->user_handler = f;
+  200.       n->userdata = userdata;
+  201.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_image_t.c:309: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 307 could be null and is dereferenced at line 309, column 5
+  307.       bot_core_image_t_subscription_t *n = (bot_core_image_t_subscription_t*)
+  308.                          malloc(sizeof(bot_core_image_t_subscription_t));
+  309. >     n->user_handler = f;
+  310.       n->userdata = userdata;
+  311.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_images_t.c:244: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 242 could be null and is dereferenced at line 244, column 5
+  242.       bot_core_images_t_subscription_t *n = (bot_core_images_t_subscription_t*)
+  243.                          malloc(sizeof(bot_core_images_t_subscription_t));
+  244. >     n->user_handler = f;
+  245.       n->userdata = userdata;
+  246.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_ins_t.c:290: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 288 could be null and is dereferenced at line 290, column 5
+  288.       bot_core_ins_t_subscription_t *n = (bot_core_ins_t_subscription_t*)
+  289.                          malloc(sizeof(bot_core_ins_t_subscription_t));
+  290. >     n->user_handler = f;
+  291.       n->userdata = userdata;
+  292.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_joint_angles_t.c:257: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 255 could be null and is dereferenced at line 257, column 5
+  255.       bot_core_joint_angles_t_subscription_t *n = (bot_core_joint_angles_t_subscription_t*)
+  256.                          malloc(sizeof(bot_core_joint_angles_t_subscription_t));
+  257. >     n->user_handler = f;
+  258.       n->userdata = userdata;
+  259.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_joint_state_t.c:276: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 274 could be null and is dereferenced at line 276, column 5
+  274.       bot_core_joint_state_t_subscription_t *n = (bot_core_joint_state_t_subscription_t*)
+  275.                          malloc(sizeof(bot_core_joint_state_t_subscription_t));
+  276. >     n->user_handler = f;
+  277.       n->userdata = userdata;
+  278.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_kvh_raw_imu_batch_t.c:228: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 226 could be null and is dereferenced at line 228, column 5
+  226.       bot_core_kvh_raw_imu_batch_t_subscription_t *n = (bot_core_kvh_raw_imu_batch_t_subscription_t*)
+  227.                          malloc(sizeof(bot_core_kvh_raw_imu_batch_t_subscription_t));
+  228. >     n->user_handler = f;
+  229.       n->userdata = userdata;
+  230.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_kvh_raw_imu_t.c:183: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 182 could be null and is dereferenced by call to `__bot_core_kvh_raw_imu_t_clone_array()` at line 183, column 5
+  181.   {
+  182.       bot_core_kvh_raw_imu_t *q = (bot_core_kvh_raw_imu_t*) malloc(sizeof(bot_core_kvh_raw_imu_t));
+  183. >     __bot_core_kvh_raw_imu_t_clone_array(p, q, 1);
+  184.       return q;
+  185.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_kvh_raw_imu_t.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       bot_core_kvh_raw_imu_t_subscription_t *n = (bot_core_kvh_raw_imu_t_subscription_t*)
+  237.                          malloc(sizeof(bot_core_kvh_raw_imu_t_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_planar_lidar_t.c:283: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 281 could be null and is dereferenced at line 283, column 5
+  281.       bot_core_planar_lidar_t_subscription_t *n = (bot_core_planar_lidar_t_subscription_t*)
+  282.                          malloc(sizeof(bot_core_planar_lidar_t_subscription_t));
+  283. >     n->user_handler = f;
+  284.       n->userdata = userdata;
+  285.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_pointcloud2_t.c:361: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 359 could be null and is dereferenced at line 361, column 5
+  359.       bot_core_pointcloud2_t_subscription_t *n = (bot_core_pointcloud2_t_subscription_t*)
+  360.                          malloc(sizeof(bot_core_pointcloud2_t_subscription_t));
+  361. >     n->user_handler = f;
+  362.       n->userdata = userdata;
+  363.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_pointcloud_t.c:345: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 343 could be null and is dereferenced at line 345, column 5
+  343.       bot_core_pointcloud_t_subscription_t *n = (bot_core_pointcloud_t_subscription_t*)
+  344.                          malloc(sizeof(bot_core_pointcloud_t_subscription_t));
+  345. >     n->user_handler = f;
+  346.       n->userdata = userdata;
+  347.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_pointfield_t.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       bot_core_pointfield_t_subscription_t *n = (bot_core_pointfield_t_subscription_t*)
+  237.                          malloc(sizeof(bot_core_pointfield_t_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_pose_t.c:209: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 208 could be null and is dereferenced by call to `__bot_core_pose_t_clone_array()` at line 209, column 5
+  207.   {
+  208.       bot_core_pose_t *q = (bot_core_pose_t*) malloc(sizeof(bot_core_pose_t));
+  209. >     __bot_core_pose_t_clone_array(p, q, 1);
+  210.       return q;
+  211.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_pose_t.c:264: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 262 could be null and is dereferenced at line 264, column 5
+  262.       bot_core_pose_t_subscription_t *n = (bot_core_pose_t_subscription_t*)
+  263.                          malloc(sizeof(bot_core_pose_t_subscription_t));
+  264. >     n->user_handler = f;
+  265.       n->userdata = userdata;
+  266.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_position_3d_t.c:157: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 156 could be null and is dereferenced by call to `__bot_core_position_3d_t_clone_array()` at line 157, column 5
+  155.   {
+  156.       bot_core_position_3d_t *q = (bot_core_position_3d_t*) malloc(sizeof(bot_core_position_3d_t));
+  157. >     __bot_core_position_3d_t_clone_array(p, q, 1);
+  158.       return q;
+  159.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_position_3d_t.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       bot_core_position_3d_t_subscription_t *n = (bot_core_position_3d_t_subscription_t*)
+  211.                          malloc(sizeof(bot_core_position_3d_t_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_quaternion_t.c:183: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 182 could be null and is dereferenced by call to `__bot_core_quaternion_t_clone_array()` at line 183, column 5
+  181.   {
+  182.       bot_core_quaternion_t *q = (bot_core_quaternion_t*) malloc(sizeof(bot_core_quaternion_t));
+  183. >     __bot_core_quaternion_t_clone_array(p, q, 1);
+  184.       return q;
+  185.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_quaternion_t.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       bot_core_quaternion_t_subscription_t *n = (bot_core_quaternion_t_subscription_t*)
+  237.                          malloc(sizeof(bot_core_quaternion_t_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_raw_t.c:228: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 226 could be null and is dereferenced at line 228, column 5
+  226.       bot_core_raw_t_subscription_t *n = (bot_core_raw_t_subscription_t*)
+  227.                          malloc(sizeof(bot_core_raw_t_subscription_t));
+  228. >     n->user_handler = f;
+  229.       n->userdata = userdata;
+  230.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_rigid_transform_t.c:170: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 169 could be null and is dereferenced by call to `__bot_core_rigid_transform_t_clone_array()` at line 170, column 5
+  168.   {
+  169.       bot_core_rigid_transform_t *q = (bot_core_rigid_transform_t*) malloc(sizeof(bot_core_rigid_transform_t));
+  170. >     __bot_core_rigid_transform_t_clone_array(p, q, 1);
+  171.       return q;
+  172.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_rigid_transform_t.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       bot_core_rigid_transform_t_subscription_t *n = (bot_core_rigid_transform_t_subscription_t*)
+  224.                          malloc(sizeof(bot_core_rigid_transform_t_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_robot_state_t.c:315: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 313 could be null and is dereferenced at line 315, column 5
+  313.       bot_core_robot_state_t_subscription_t *n = (bot_core_robot_state_t_subscription_t*)
+  314.                          malloc(sizeof(bot_core_robot_state_t_subscription_t));
+  315. >     n->user_handler = f;
+  316.       n->userdata = userdata;
+  317.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_robot_urdf_t.c:251: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 249 could be null and is dereferenced at line 251, column 5
+  249.       bot_core_robot_urdf_t_subscription_t *n = (bot_core_robot_urdf_t_subscription_t*)
+  250.                          malloc(sizeof(bot_core_robot_urdf_t_subscription_t));
+  251. >     n->user_handler = f;
+  252.       n->userdata = userdata;
+  253.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_sensor_status_t.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       bot_core_sensor_status_t_subscription_t *n = (bot_core_sensor_status_t_subscription_t*)
+  237.                          malloc(sizeof(bot_core_sensor_status_t_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_six_axis_force_torque_array_t.c:244: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 242 could be null and is dereferenced at line 244, column 5
+  242.       bot_core_six_axis_force_torque_array_t_subscription_t *n = (bot_core_six_axis_force_torque_array_t_subscription_t*)
+  243.                          malloc(sizeof(bot_core_six_axis_force_torque_array_t_subscription_t));
+  244. >     n->user_handler = f;
+  245.       n->userdata = userdata;
+  246.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_six_axis_force_torque_t.c:170: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 169 could be null and is dereferenced by call to `__bot_core_six_axis_force_torque_t_clone_array()` at line 170, column 5
+  168.   {
+  169.       bot_core_six_axis_force_torque_t *q = (bot_core_six_axis_force_torque_t*) malloc(sizeof(bot_core_six_axis_force_torque_t));
+  170. >     __bot_core_six_axis_force_torque_t_clone_array(p, q, 1);
+  171.       return q;
+  172.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_six_axis_force_torque_t.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       bot_core_six_axis_force_torque_t_subscription_t *n = (bot_core_six_axis_force_torque_t_subscription_t*)
+  224.                          malloc(sizeof(bot_core_six_axis_force_torque_t_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_system_status_t.c:251: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 249 could be null and is dereferenced at line 251, column 5
+  249.       bot_core_system_status_t_subscription_t *n = (bot_core_system_status_t_subscription_t*)
+  250.                          malloc(sizeof(bot_core_system_status_t_subscription_t));
+  251. >     n->user_handler = f;
+  252.       n->userdata = userdata;
+  253.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_twist_t.c:157: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 156 could be null and is dereferenced by call to `__bot_core_twist_t_clone_array()` at line 157, column 5
+  155.   {
+  156.       bot_core_twist_t *q = (bot_core_twist_t*) malloc(sizeof(bot_core_twist_t));
+  157. >     __bot_core_twist_t_clone_array(p, q, 1);
+  158.       return q;
+  159.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_twist_t.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       bot_core_twist_t_subscription_t *n = (bot_core_twist_t_subscription_t*)
+  211.                          malloc(sizeof(bot_core_twist_t_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_utime_t.c:144: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 143 could be null and is dereferenced by call to `__bot_core_utime_t_clone_array()` at line 144, column 5
+  142.   {
+  143.       bot_core_utime_t *q = (bot_core_utime_t*) malloc(sizeof(bot_core_utime_t));
+  144. >     __bot_core_utime_t_clone_array(p, q, 1);
+  145.       return q;
+  146.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_utime_t.c:199: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 197 could be null and is dereferenced at line 199, column 5
+  197.       bot_core_utime_t_subscription_t *n = (bot_core_utime_t_subscription_t*)
+  198.                          malloc(sizeof(bot_core_utime_t_subscription_t));
+  199. >     n->user_handler = f;
+  200.       n->userdata = userdata;
+  201.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_vector_3d_t.c:170: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 169 could be null and is dereferenced by call to `__bot_core_vector_3d_t_clone_array()` at line 170, column 5
+  168.   {
+  169.       bot_core_vector_3d_t *q = (bot_core_vector_3d_t*) malloc(sizeof(bot_core_vector_3d_t));
+  170. >     __bot_core_vector_3d_t_clone_array(p, q, 1);
+  171.       return q;
+  172.   }
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_vector_3d_t.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       bot_core_vector_3d_t_subscription_t *n = (bot_core_vector_3d_t_subscription_t*)
+  224.                          malloc(sizeof(bot_core_vector_3d_t_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_viewer_command_t.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       bot_core_viewer_command_t_subscription_t *n = (bot_core_viewer_command_t_subscription_t*)
+  211.                          malloc(sizeof(bot_core_viewer_command_t_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_viewer_draw_t.c:322: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 320 could be null and is dereferenced at line 322, column 5
+  320.       bot_core_viewer_draw_t_subscription_t *n = (bot_core_viewer_draw_t_subscription_t*)
+  321.                          malloc(sizeof(bot_core_viewer_draw_t_subscription_t));
+  322. >     n->user_handler = f;
+  323.       n->userdata = userdata;
+  324.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_viewer_geometry_data_t.c:280: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 278 could be null and is dereferenced at line 280, column 5
+  278.       bot_core_viewer_geometry_data_t_subscription_t *n = (bot_core_viewer_geometry_data_t_subscription_t*)
+  279.                          malloc(sizeof(bot_core_viewer_geometry_data_t_subscription_t));
+  280. >     n->user_handler = f;
+  281.       n->userdata = userdata;
+  282.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_viewer_link_data_t.c:241: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 239 could be null and is dereferenced at line 241, column 5
+  239.       bot_core_viewer_link_data_t_subscription_t *n = (bot_core_viewer_link_data_t_subscription_t*)
+  240.                          malloc(sizeof(bot_core_viewer_link_data_t_subscription_t));
+  241. >     n->user_handler = f;
+  242.       n->userdata = userdata;
+  243.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/bot_core_lcmtypes/lcmtypes/bot_core_viewer_load_robot_t.c:215: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 213 could be null and is dereferenced at line 215, column 5
+  213.       bot_core_viewer_load_robot_t_subscription_t *n = (bot_core_viewer_load_robot_t_subscription_t*)
+  214.                          malloc(sizeof(bot_core_viewer_load_robot_t_subscription_t));
+  215. >     n->user_handler = f;
+  216.       n->userdata = userdata;
+  217.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-frames/src/bot_frames.c:538: error: NULL_DEREFERENCE
+  pointer `frames` last assigned on line 530 could be null and is dereferenced at line 538, column 5
+  536.     while (g_hash_table_iter_next(&iter, &key, &value)) {
+  537.       frame_handle_t * han = (frame_handle_t *) value;
+  538. >     frames[han->frame_num] = strdup(han->frame_name);
+  539.     }
+  540.     g_mutex_unlock(bot_frames->mutex);
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-frames/src/bot_frames.c:185: error: NULL_DEREFERENCE
+  pointer `self->root_name` last assigned on line 176 could be null and is dereferenced by call to `strdup()` at line 185, column 29
+  183.     //create a frame_handle for the root frame
+  184.     frame_handle_t * root_handle = (frame_handle_t *) calloc(1, sizeof(frame_handle_t));
+  185. >   root_handle->frame_name = strdup(self->root_name);
+  186.     root_handle->frame_num =self->num_frames++;
+  187.     g_hash_table_insert(self->frame_handles_by_name, (gpointer) self->root_name, (gpointer) root_handle);
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-frames/src/bot_frames.c:185: error: NULL_DEREFERENCE
+  pointer `root_handle` last assigned on line 184 could be null and is dereferenced at line 185, column 3
+  183.     //create a frame_handle for the root frame
+  184.     frame_handle_t * root_handle = (frame_handle_t *) calloc(1, sizeof(frame_handle_t));
+  185. >   root_handle->frame_name = strdup(self->root_name);
+  186.     root_handle->frame_num =self->num_frames++;
+  187.     g_hash_table_insert(self->frame_handles_by_name, (gpointer) self->root_name, (gpointer) root_handle);
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-frames/lcmtypes/c/lcmtypes/bot_frames_update_t.c:251: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 249 could be null and is dereferenced at line 251, column 5
+  249.       bot_frames_update_t_subscription_t *n = (bot_frames_update_t_subscription_t*)
+  250.                          malloc(sizeof(bot_frames_update_t_subscription_t));
+  251. >     n->user_handler = f;
+  252.       n->userdata = userdata;
+  253.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcmgl/lcmtypes/c/lcmtypes/bot_lcmgl_data_t.c:254: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 252 could be null and is dereferenced at line 254, column 5
+  252.       bot_lcmgl_data_t_subscription_t *n = (bot_lcmgl_data_t_subscription_t*)
+  253.                          malloc(sizeof(bot_lcmgl_data_t_subscription_t));
+  254. >     n->user_handler = f;
+  255.       n->userdata = userdata;
+  256.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcmgl/src/bot_lcmgl_client/lcmgl.c:88: error: NULL_DEREFERENCE
+  pointer `lcmgl->data` last assigned on line 86 could be null and is dereferenced at line 88, column 5
+  86.       ensure_space(lcmgl, 4);
+  87.   
+  88. >     lcmgl->data[lcmgl->datalen++] = (v>>24) & 0xff;
+  89.       lcmgl->data[lcmgl->datalen++] = (v>>16) & 0xff;
+  90.       lcmgl->data[lcmgl->datalen++] = (v>>8)  & 0xff;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcmgl/src/bot_lcmgl_client/lcmgl.c:97: error: NULL_DEREFERENCE
+  pointer `lcmgl->data` last assigned on line 96 could be null and is dereferenced at line 97, column 5
+  95.   {
+  96.       ensure_space(lcmgl, 8);
+  97. >     lcmgl->data[lcmgl->datalen++] = (v>>56) & 0xff;
+  98.       lcmgl->data[lcmgl->datalen++] = (v>>48) & 0xff;
+  99.       lcmgl->data[lcmgl->datalen++] = (v>>40) & 0xff;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcmgl/src/bot_lcmgl_client/lcmgl.c:81: error: NULL_DEREFERENCE
+  pointer `lcmgl->data` last assigned on line 79 could be null and is dereferenced at line 81, column 5
+  79.       ensure_space(lcmgl, 1);
+  80.   
+  81. >     lcmgl->data[lcmgl->datalen++] = v & 0xff;
+  82.   }
+  83.   
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcmgl/src/bot_lcmgl_client/lcmgl.c:160: error: NULL_DEREFERENCE
+  pointer `lcmgl` last assigned on line 158 could be null and is dereferenced at line 160, column 5
+  158.       bot_lcmgl_t *lcmgl = (bot_lcmgl_t*) calloc(1, sizeof(bot_lcmgl_t));
+  159.   
+  160. >     lcmgl->lcm = lcm;
+  161.       lcmgl->name = strdup(name);
+  162.       lcmgl->scene = _timestamp_now();
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:315: error: NULL_DEREFERENCE
+  pointer `funcs` last assigned on line 314 could be null and is dereferenced at line 315, column 5
+  313.   
+  314.       BotDistortionFuncs *funcs = (BotDistortionFuncs*)calloc(1, sizeof(BotDistortionFuncs));
+  315. >     funcs->dist_func = null_distort_func;
+  316.       funcs->undist_func = null_undistort_func;
+  317.       funcs->destroy_func = null_distortion_destroy;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/lcmtypes/c/lcmtypes/bot_param_entry_t.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       bot_param_entry_t_subscription_t *n = (bot_param_entry_t_subscription_t*)
+  211.                          malloc(sizeof(bot_param_entry_t_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1329: error: NULL_DEREFERENCE
+  pointer `data` last assigned on line 1325 could be null and is dereferenced at line 1329, column 5
+  1327.     int i;
+  1328.     for (i = 0; i < el->num_values; i++) {
+  1329. >     data[i] = strdup(el->values[i]);
+  1330.     }
+  1331.   
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1612: error: NULL_DEREFERENCE
+  pointer `tmp_orig` last assigned on line 1611 could be null and is dereferenced by call to `sprintf()` at line 1612, column 3
+  1610.     int ret = 0;
+  1611.     char * tmp_orig = (char *) calloc(strlen(override_params) + 2, sizeof(char));
+  1612. >   sprintf(tmp_orig, "%s|", override_params);
+  1613.   
+  1614.     char * tmpP = tmp_orig;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/lcmtypes/c/lcmtypes/bot_param_request_t.c:144: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 143 could be null and is dereferenced by call to `__bot_param_request_t_clone_array()` at line 144, column 5
+  142.   {
+  143.       bot_param_request_t *q = (bot_param_request_t*) malloc(sizeof(bot_param_request_t));
+  144. >     __bot_param_request_t_clone_array(p, q, 1);
+  145.       return q;
+  146.   }
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/lcmtypes/c/lcmtypes/bot_param_request_t.c:199: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 197 could be null and is dereferenced at line 199, column 5
+  197.       bot_param_request_t_subscription_t *n = (bot_param_request_t_subscription_t*)
+  198.                          malloc(sizeof(bot_param_request_t_subscription_t));
+  199. >     n->user_handler = f;
+  200.       n->userdata = userdata;
+  201.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1480: error: NULL_DEREFERENCE
+  pointer `str` last assigned on line 1479 could be null and is dereferenced by call to `strcat()` at line 1480, column 5
+  1478.       single_len = strlen(single_val);
+  1479.       str = realloc(str, string_len + single_len);
+  1480. >     strcat(str, single_val);
+  1481.       string_len += single_len;
+  1482.     }
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1471: error: NULL_DEREFERENCE
+  pointer `str` last assigned on line 1470 could be null and is dereferenced at line 1471, column 3
+  1469.   
+  1470.     str = malloc(1);
+  1471. >   str[0] = '\0';
+  1472.     for (i = 0; i < len; ++i) {
+  1473.       strcpy(val_str, (vals[i] == 0 ? "false" : "true"));
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1506: error: NULL_DEREFERENCE
+  pointer `str` last assigned on line 1505 could be null and is dereferenced by call to `strcat()` at line 1506, column 5
+  1504.       single_len = strlen(single_val);
+  1505.       str = realloc(str, string_len + single_len);
+  1506. >     strcat(str, single_val);
+  1507.       string_len += single_len;
+  1508.     }
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1498: error: NULL_DEREFERENCE
+  pointer `str` last assigned on line 1497 could be null and is dereferenced at line 1498, column 3
+  1496.   
+  1497.     str = malloc(1);
+  1498. >   str[0] = '\0';
+  1499.     for (i = 0; i < len; ++i) {
+  1500.       if (i < len - 1)
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1452: error: NULL_DEREFERENCE
+  pointer `str` last assigned on line 1451 could be null and is dereferenced by call to `strcat()` at line 1452, column 5
+  1450.       single_len = strlen(single_val);
+  1451.       str = realloc(str, string_len + single_len);
+  1452. >     strcat(str, single_val);
+  1453.       string_len += single_len;
+  1454.     }
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1444: error: NULL_DEREFERENCE
+  pointer `str` last assigned on line 1443 could be null and is dereferenced at line 1444, column 3
+  1442.   
+  1443.     str = malloc(1);
+  1444. >   str[0] = '\0';
+  1445.     for (i = 0; i < len; ++i) {
+  1446.       if (i < len - 1)
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1524: error: NULL_DEREFERENCE
+  pointer `str` last assigned on line 1523 could be null and is dereferenced at line 1524, column 3
+  1522.   
+  1523.     str = malloc(1);
+  1524. >   str[0] = '\0';
+  1525.     for (i = 0; i < len; ++i) {
+  1526.       if (i < len - 1)
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:1532: error: NULL_DEREFERENCE
+  pointer `str` last assigned on line 1531 could be null and is dereferenced by call to `strcat()` at line 1532, column 5
+  1530.       single_len = strlen(single_val);
+  1531.       str = realloc(str, string_len + single_len);
+  1532. >     strcat(str, single_val);
+  1533.       string_len += single_len;
+  1534.     }
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/lcmtypes/c/lcmtypes/bot_param_set_t.c:254: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 252 could be null and is dereferenced at line 254, column 5
+  252.       bot_param_set_t_subscription_t *n = (bot_param_set_t_subscription_t*)
+  253.                          malloc(sizeof(bot_param_set_t_subscription_t));
+  254. >     n->user_handler = f;
+  255.       n->userdata = userdata;
+  256.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/lcmtypes/c/lcmtypes/bot_param_update_t.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       bot_param_update_t_subscription_t *n = (bot_param_update_t_subscription_t*)
+  237.                          malloc(sizeof(bot_param_update_t_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:412: error: NULL_DEREFERENCE
+  pointer `params` last assigned on line 409 could be null and is dereferenced at line 412, column 5
+  410.           (OpenCvDistortionParams*)calloc(1, sizeof(OpenCvDistortionParams));
+  411.       assert (NULL != params);
+  412. >     params->k1 = k1;
+  413.       params->k2 = k2;
+  414.       params->k3 = k3;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:421: error: NULL_DEREFERENCE
+  pointer `funcs` last assigned on line 420 could be null and is dereferenced at line 421, column 5
+  419.   
+  420.       BotDistortionFuncs *funcs = (BotDistortionFuncs*)calloc(1, sizeof(BotDistortionFuncs));
+  421. >     funcs->dist_func = plumb_bob_distort_func;
+  422.       funcs->undist_func = plumb_bob_undistort_func;
+  423.       funcs->destroy_func = plumb_bob_distortion_destroy;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_command2_t.c:309: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 307 could be null and is dereferenced at line 309, column 5
+  307.       bot_procman_command2_t_subscription_t *n = (bot_procman_command2_t_subscription_t*)
+  308.                          malloc(sizeof(bot_procman_command2_t_subscription_t));
+  309. >     n->user_handler = f;
+  310.       n->userdata = userdata;
+  311.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_deputy_cmd2_t.c:290: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 288 could be null and is dereferenced at line 290, column 5
+  288.       bot_procman_deputy_cmd2_t_subscription_t *n = (bot_procman_deputy_cmd2_t_subscription_t*)
+  289.                          malloc(sizeof(bot_procman_deputy_cmd2_t_subscription_t));
+  290. >     n->user_handler = f;
+  291.       n->userdata = userdata;
+  292.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_deputy_cmd_t.c:329: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 327 could be null and is dereferenced at line 329, column 5
+  327.       bot_procman_deputy_cmd_t_subscription_t *n = (bot_procman_deputy_cmd_t_subscription_t*)
+  328.                          malloc(sizeof(bot_procman_deputy_cmd_t_subscription_t));
+  329. >     n->user_handler = f;
+  330.       n->userdata = userdata;
+  331.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_discovery_t.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       bot_procman_discovery_t_subscription_t *n = (bot_procman_discovery_t_subscription_t*)
+  224.                          malloc(sizeof(bot_procman_discovery_t_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_info2_t.c:351: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 349 could be null and is dereferenced at line 351, column 5
+  349.       bot_procman_info2_t_subscription_t *n = (bot_procman_info2_t_subscription_t*)
+  350.                          malloc(sizeof(bot_procman_info2_t_subscription_t));
+  351. >     n->user_handler = f;
+  352.       n->userdata = userdata;
+  353.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_info_t.c:306: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 304 could be null and is dereferenced at line 306, column 5
+  304.       bot_procman_info_t_subscription_t *n = (bot_procman_info_t_subscription_t*)
+  305.                          malloc(sizeof(bot_procman_info_t_subscription_t));
+  306. >     n->user_handler = f;
+  307.       n->userdata = userdata;
+  308.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_orders2_t.c:299: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 297 could be null and is dereferenced at line 299, column 5
+  297.       bot_procman_orders2_t_subscription_t *n = (bot_procman_orders2_t_subscription_t*)
+  298.                          malloc(sizeof(bot_procman_orders2_t_subscription_t));
+  299. >     n->user_handler = f;
+  300.       n->userdata = userdata;
+  301.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_orders_t.c:299: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 297 could be null and is dereferenced at line 299, column 5
+  297.       bot_procman_orders_t_subscription_t *n = (bot_procman_orders_t_subscription_t*)
+  298.                          malloc(sizeof(bot_procman_orders_t_subscription_t));
+  299. >     n->user_handler = f;
+  300.       n->userdata = userdata;
+  301.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_printf_t.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       bot_procman_printf_t_subscription_t *n = (bot_procman_printf_t_subscription_t*)
+  237.                          malloc(sizeof(bot_procman_printf_t_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_sheriff_cmd2_t.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       bot_procman_sheriff_cmd2_t_subscription_t *n = (bot_procman_sheriff_cmd2_t_subscription_t*)
+  237.                          malloc(sizeof(bot_procman_sheriff_cmd2_t_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/lcmtypes/c/lcmtypes/bot_procman_sheriff_cmd_t.c:277: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 275 could be null and is dereferenced at line 277, column 5
+  275.       bot_procman_sheriff_cmd_t_subscription_t *n = (bot_procman_sheriff_cmd_t_subscription_t*)
+  276.                          malloc(sizeof(bot_procman_sheriff_cmd_t_subscription_t));
+  277. >     n->user_handler = f;
+  278.       n->userdata = userdata;
+  279.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/ptr_circular.c:13: error: NULL_DEREFERENCE
+  pointer `circ` last assigned on line 11 could be null and is dereferenced at line 13, column 9
+  11.       BotPtrCircular *circ = (BotPtrCircular*) calloc(1, sizeof(BotPtrCircular));
+  12.       if (capacity > 0)
+  13. >         circ->p = (void**) calloc(capacity, sizeof(void*));
+  14.       else
+  15.           circ->p = NULL;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/ptr_circular.c:15: error: NULL_DEREFERENCE
+  pointer `circ` last assigned on line 11 could be null and is dereferenced at line 15, column 9
+  13.           circ->p = (void**) calloc(capacity, sizeof(void*));
+  14.       else
+  15. >         circ->p = NULL;
+  16.       
+  17.       circ->size = 0;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/ringbuf.c:27: error: NULL_DEREFERENCE
+  pointer `cbuf` last assigned on line 26 could be null and is dereferenced at line 27, column 3
+  25.     //create buffer, and allocate space for size bytes
+  26.     BotRingBuf * cbuf = (BotRingBuf *) calloc(1,sizeof(BotRingBuf));
+  27. >   cbuf->buf = (uint8_t *) malloc(size * sizeof(uint8_t));
+  28.     cbuf->readOffset = cbuf->writeOffset = cbuf->numBytes = 0;
+  29.     cbuf->maxSize = size;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:94: error: NULL_DEREFERENCE
+  pointer `dist` last assigned on line 89 could be null and is dereferenced at line 94, column 5
+  92.       SphericalDistortionParams *params = (SphericalDistortionParams*)calloc(1, sizeof(SphericalDistortionParams));
+  93.       params->a = a*a*a*a;
+  94. >     dist->params = (void*)params;
+  95.   
+  96.       BotDistortionFuncs *funcs = (BotDistortionFuncs*)calloc(1, sizeof(BotDistortionFuncs));
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:97: error: NULL_DEREFERENCE
+  pointer `funcs` last assigned on line 96 could be null and is dereferenced at line 97, column 5
+  95.   
+  96.       BotDistortionFuncs *funcs = (BotDistortionFuncs*)calloc(1, sizeof(BotDistortionFuncs));
+  97. >     funcs->dist_func = spherical_distort_func;
+  98.       funcs->undist_func = spherical_undistort_func;
+  99.       funcs->destroy_func = spherical_distortion_destroy;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/camtrans.c:93: error: NULL_DEREFERENCE
+  pointer `params` last assigned on line 92 could be null and is dereferenced at line 93, column 5
+  91.   
+  92.       SphericalDistortionParams *params = (SphericalDistortionParams*)calloc(1, sizeof(SphericalDistortionParams));
+  93. >     params->a = a*a*a*a;
+  94.       dist->params = (void*)params;
+  95.   
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-core/src/bot_core/ssocket.c:174: error: NULL_DEREFERENCE
+  pointer `cs` last assigned on line 157 could be null and is dereferenced at line 174, column 2
+  172.   	}
+  173.   
+  174. > 	cs->type = BOT_SSOCKET_CLIENT_TYPE;
+  175.   	cs->socket = thesocket;
+  176.   
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcmtypes/channel_port_map_update_t.c:173: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 172 could be null and is dereferenced by call to `__channel_port_map_update_t_clone_array()` at line 173, column 5
+  171.   {
+  172.       channel_port_map_update_t *q = (channel_port_map_update_t*) malloc(sizeof(channel_port_map_update_t));
+  173. >     __channel_port_map_update_t_clone_array(p, q, 1);
+  174.       return q;
+  175.   }
+
+drake/lcmtypes/drake_lcmt_acrobot_u.c:157: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 156 could be null and is dereferenced by call to `__drake_lcmt_acrobot_u_clone_array()` at line 157, column 5
+  155.   {
+  156.       drake_lcmt_acrobot_u *q = (drake_lcmt_acrobot_u*) malloc(sizeof(drake_lcmt_acrobot_u));
+  157. >     __drake_lcmt_acrobot_u_clone_array(p, q, 1);
+  158.       return q;
+  159.   }
+
+drake/lcmtypes/drake_lcmt_acrobot_u.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       drake_lcmt_acrobot_u_subscription_t *n = (drake_lcmt_acrobot_u_subscription_t*)
+  211.                          malloc(sizeof(drake_lcmt_acrobot_u_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_acrobot_x.c:196: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 195 could be null and is dereferenced by call to `__drake_lcmt_acrobot_x_clone_array()` at line 196, column 5
+  194.   {
+  195.       drake_lcmt_acrobot_x *q = (drake_lcmt_acrobot_x*) malloc(sizeof(drake_lcmt_acrobot_x));
+  196. >     __drake_lcmt_acrobot_x_clone_array(p, q, 1);
+  197.       return q;
+  198.   }
+
+drake/lcmtypes/drake_lcmt_acrobot_x.c:251: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 249 could be null and is dereferenced at line 251, column 5
+  249.       drake_lcmt_acrobot_x_subscription_t *n = (drake_lcmt_acrobot_x_subscription_t*)
+  250.                          malloc(sizeof(drake_lcmt_acrobot_x_subscription_t));
+  251. >     n->user_handler = f;
+  252.       n->userdata = userdata;
+  253.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_acrobot_y.c:183: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 182 could be null and is dereferenced by call to `__drake_lcmt_acrobot_y_clone_array()` at line 183, column 5
+  181.   {
+  182.       drake_lcmt_acrobot_y *q = (drake_lcmt_acrobot_y*) malloc(sizeof(drake_lcmt_acrobot_y));
+  183. >     __drake_lcmt_acrobot_y_clone_array(p, q, 1);
+  184.       return q;
+  185.   }
+
+drake/lcmtypes/drake_lcmt_acrobot_y.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       drake_lcmt_acrobot_y_subscription_t *n = (drake_lcmt_acrobot_y_subscription_t*)
+  237.                          malloc(sizeof(drake_lcmt_acrobot_y_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_bicycle_car_parameters_t.c:222: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 221 could be null and is dereferenced by call to `__drake_lcmt_bicycle_car_parameters_t_clone_array()` at line 222, column 5
+  220.   {
+  221.       drake_lcmt_bicycle_car_parameters_t *q = (drake_lcmt_bicycle_car_parameters_t*) malloc(sizeof(drake_lcmt_bicycle_car_parameters_t));
+  222. >     __drake_lcmt_bicycle_car_parameters_t_clone_array(p, q, 1);
+  223.       return q;
+  224.   }
+
+drake/lcmtypes/drake_lcmt_bicycle_car_parameters_t.c:277: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 275 could be null and is dereferenced at line 277, column 5
+  275.       drake_lcmt_bicycle_car_parameters_t_subscription_t *n = (drake_lcmt_bicycle_car_parameters_t_subscription_t*)
+  276.                          malloc(sizeof(drake_lcmt_bicycle_car_parameters_t_subscription_t));
+  277. >     n->user_handler = f;
+  278.       n->userdata = userdata;
+  279.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_bicycle_car_state_t.c:222: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 221 could be null and is dereferenced by call to `__drake_lcmt_bicycle_car_state_t_clone_array()` at line 222, column 5
+  220.   {
+  221.       drake_lcmt_bicycle_car_state_t *q = (drake_lcmt_bicycle_car_state_t*) malloc(sizeof(drake_lcmt_bicycle_car_state_t));
+  222. >     __drake_lcmt_bicycle_car_state_t_clone_array(p, q, 1);
+  223.       return q;
+  224.   }
+
+drake/lcmtypes/drake_lcmt_bicycle_car_state_t.c:277: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 275 could be null and is dereferenced at line 277, column 5
+  275.       drake_lcmt_bicycle_car_state_t_subscription_t *n = (drake_lcmt_bicycle_car_state_t_subscription_t*)
+  276.                          malloc(sizeof(drake_lcmt_bicycle_car_state_t_subscription_t));
+  277. >     n->user_handler = f;
+  278.       n->userdata = userdata;
+  279.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_body_acceleration.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       drake_lcmt_body_acceleration_subscription_t *n = (drake_lcmt_body_acceleration_subscription_t*)
+  224.                          malloc(sizeof(drake_lcmt_body_acceleration_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_body_motion_data.c:342: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 340 could be null and is dereferenced at line 342, column 5
+  340.       drake_lcmt_body_motion_data_subscription_t *n = (drake_lcmt_body_motion_data_subscription_t*)
+  341.                          malloc(sizeof(drake_lcmt_body_motion_data_subscription_t));
+  342. >     n->user_handler = f;
+  343.       n->userdata = userdata;
+  344.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_body_wrench_data.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       drake_lcmt_body_wrench_data_subscription_t *n = (drake_lcmt_body_wrench_data_subscription_t*)
+  224.                          malloc(sizeof(drake_lcmt_body_wrench_data_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_constrained_values.c:260: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 258 could be null and is dereferenced at line 260, column 5
+  258.       drake_lcmt_constrained_values_subscription_t *n = (drake_lcmt_constrained_values_subscription_t*)
+  259.                          malloc(sizeof(drake_lcmt_constrained_values_subscription_t));
+  260. >     n->user_handler = f;
+  261.       n->userdata = userdata;
+  262.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_contact_info_for_viz.c:264: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 262 could be null and is dereferenced at line 264, column 5
+  262.       drake_lcmt_contact_info_for_viz_subscription_t *n = (drake_lcmt_contact_info_for_viz_subscription_t*)
+  263.                          malloc(sizeof(drake_lcmt_contact_info_for_viz_subscription_t));
+  264. >     n->user_handler = f;
+  265.       n->userdata = userdata;
+  266.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_contact_information.c:342: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 340 could be null and is dereferenced at line 342, column 5
+  340.       drake_lcmt_contact_information_subscription_t *n = (drake_lcmt_contact_information_subscription_t*)
+  341.                          malloc(sizeof(drake_lcmt_contact_information_subscription_t));
+  342. >     n->user_handler = f;
+  343.       n->userdata = userdata;
+  344.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_contact_results_for_viz.c:228: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 226 could be null and is dereferenced at line 228, column 5
+  226.       drake_lcmt_contact_results_for_viz_subscription_t *n = (drake_lcmt_contact_results_for_viz_subscription_t*)
+  227.                          malloc(sizeof(drake_lcmt_contact_results_for_viz_subscription_t));
+  228. >     n->user_handler = f;
+  229.       n->userdata = userdata;
+  230.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_desired_body_motion.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       drake_lcmt_desired_body_motion_subscription_t *n = (drake_lcmt_desired_body_motion_subscription_t*)
+  237.                          malloc(sizeof(drake_lcmt_desired_body_motion_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_desired_centroidal_momentum_dot.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       drake_lcmt_desired_centroidal_momentum_dot_subscription_t *n = (drake_lcmt_desired_centroidal_momentum_dot_subscription_t*)
+  211.                          malloc(sizeof(drake_lcmt_desired_centroidal_momentum_dot_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_desired_dof_motions.c:241: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 239 could be null and is dereferenced at line 241, column 5
+  239.       drake_lcmt_desired_dof_motions_subscription_t *n = (drake_lcmt_desired_dof_motions_subscription_t*)
+  240.                          malloc(sizeof(drake_lcmt_desired_dof_motions_subscription_t));
+  241. >     n->user_handler = f;
+  242.       n->userdata = userdata;
+  243.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_drake_signal.c:244: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 242 could be null and is dereferenced at line 244, column 5
+  242.       drake_lcmt_drake_signal_subscription_t *n = (drake_lcmt_drake_signal_subscription_t*)
+  243.                          malloc(sizeof(drake_lcmt_drake_signal_subscription_t));
+  244. >     n->user_handler = f;
+  245.       n->userdata = userdata;
+  246.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_driving_command_t.c:170: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 169 could be null and is dereferenced by call to `__drake_lcmt_driving_command_t_clone_array()` at line 170, column 5
+  168.   {
+  169.       drake_lcmt_driving_command_t *q = (drake_lcmt_driving_command_t*) malloc(sizeof(drake_lcmt_driving_command_t));
+  170. >     __drake_lcmt_driving_command_t_clone_array(p, q, 1);
+  171.       return q;
+  172.   }
+
+drake/lcmtypes/drake_lcmt_driving_command_t.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       drake_lcmt_driving_command_t_subscription_t *n = (drake_lcmt_driving_command_t_subscription_t*)
+  224.                          malloc(sizeof(drake_lcmt_driving_command_t_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_endless_road_car_config_t.c:209: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 208 could be null and is dereferenced by call to `__drake_lcmt_endless_road_car_config_t_clone_array()` at line 209, column 5
+  207.   {
+  208.       drake_lcmt_endless_road_car_config_t *q = (drake_lcmt_endless_road_car_config_t*) malloc(sizeof(drake_lcmt_endless_road_car_config_t));
+  209. >     __drake_lcmt_endless_road_car_config_t_clone_array(p, q, 1);
+  210.       return q;
+  211.   }
+
+drake/lcmtypes/drake_lcmt_endless_road_car_config_t.c:264: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 262 could be null and is dereferenced at line 264, column 5
+  262.       drake_lcmt_endless_road_car_config_t_subscription_t *n = (drake_lcmt_endless_road_car_config_t_subscription_t*)
+  263.                          malloc(sizeof(drake_lcmt_endless_road_car_config_t_subscription_t));
+  264. >     n->user_handler = f;
+  265.       n->userdata = userdata;
+  266.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_endless_road_car_state_t.c:196: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 195 could be null and is dereferenced by call to `__drake_lcmt_endless_road_car_state_t_clone_array()` at line 196, column 5
+  194.   {
+  195.       drake_lcmt_endless_road_car_state_t *q = (drake_lcmt_endless_road_car_state_t*) malloc(sizeof(drake_lcmt_endless_road_car_state_t));
+  196. >     __drake_lcmt_endless_road_car_state_t_clone_array(p, q, 1);
+  197.       return q;
+  198.   }
+
+drake/lcmtypes/drake_lcmt_endless_road_car_state_t.c:251: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 249 could be null and is dereferenced at line 251, column 5
+  249.       drake_lcmt_endless_road_car_state_t_subscription_t *n = (drake_lcmt_endless_road_car_state_t_subscription_t*)
+  250.                          malloc(sizeof(drake_lcmt_endless_road_car_state_t_subscription_t));
+  251. >     n->user_handler = f;
+  252.       n->userdata = userdata;
+  253.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_endless_road_oracle_output_t.c:170: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 169 could be null and is dereferenced by call to `__drake_lcmt_endless_road_oracle_output_t_clone_array()` at line 170, column 5
+  168.   {
+  169.       drake_lcmt_endless_road_oracle_output_t *q = (drake_lcmt_endless_road_oracle_output_t*) malloc(sizeof(drake_lcmt_endless_road_oracle_output_t));
+  170. >     __drake_lcmt_endless_road_oracle_output_t_clone_array(p, q, 1);
+  171.       return q;
+  172.   }
+
+drake/lcmtypes/drake_lcmt_endless_road_oracle_output_t.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       drake_lcmt_endless_road_oracle_output_t_subscription_t *n = (drake_lcmt_endless_road_oracle_output_t_subscription_t*)
+  224.                          malloc(sizeof(drake_lcmt_endless_road_oracle_output_t_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_euler_floating_joint_state_t.c:222: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 221 could be null and is dereferenced by call to `__drake_lcmt_euler_floating_joint_state_t_clone_array()` at line 222, column 5
+  220.   {
+  221.       drake_lcmt_euler_floating_joint_state_t *q = (drake_lcmt_euler_floating_joint_state_t*) malloc(sizeof(drake_lcmt_euler_floating_joint_state_t));
+  222. >     __drake_lcmt_euler_floating_joint_state_t_clone_array(p, q, 1);
+  223.       return q;
+  224.   }
+
+drake/lcmtypes/drake_lcmt_euler_floating_joint_state_t.c:277: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 275 could be null and is dereferenced at line 277, column 5
+  275.       drake_lcmt_euler_floating_joint_state_t_subscription_t *n = (drake_lcmt_euler_floating_joint_state_t_subscription_t*)
+  276.                          malloc(sizeof(drake_lcmt_euler_floating_joint_state_t_subscription_t));
+  277. >     n->user_handler = f;
+  278.       n->userdata = userdata;
+  279.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_foot_flag.c:170: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 169 could be null and is dereferenced by call to `__drake_lcmt_foot_flag_clone_array()` at line 170, column 5
+  168.   {
+  169.       drake_lcmt_foot_flag *q = (drake_lcmt_foot_flag*) malloc(sizeof(drake_lcmt_foot_flag));
+  170. >     __drake_lcmt_foot_flag_clone_array(p, q, 1);
+  171.       return q;
+  172.   }
+
+drake/lcmtypes/drake_lcmt_foot_flag.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       drake_lcmt_foot_flag_subscription_t *n = (drake_lcmt_foot_flag_subscription_t*)
+  224.                          malloc(sizeof(drake_lcmt_foot_flag_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_force_torque.c:222: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 221 could be null and is dereferenced by call to `__drake_lcmt_force_torque_clone_array()` at line 222, column 5
+  220.   {
+  221.       drake_lcmt_force_torque *q = (drake_lcmt_force_torque*) malloc(sizeof(drake_lcmt_force_torque));
+  222. >     __drake_lcmt_force_torque_clone_array(p, q, 1);
+  223.       return q;
+  224.   }
+
+drake/lcmtypes/drake_lcmt_force_torque.c:277: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 275 could be null and is dereferenced at line 277, column 5
+  275.       drake_lcmt_force_torque_subscription_t *n = (drake_lcmt_force_torque_subscription_t*)
+  276.                          malloc(sizeof(drake_lcmt_force_torque_subscription_t));
+  277. >     n->user_handler = f;
+  278.       n->userdata = userdata;
+  279.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_iiwa_command.c:257: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 255 could be null and is dereferenced at line 257, column 5
+  255.       drake_lcmt_iiwa_command_subscription_t *n = (drake_lcmt_iiwa_command_subscription_t*)
+  256.                          malloc(sizeof(drake_lcmt_iiwa_command_subscription_t));
+  257. >     n->user_handler = f;
+  258.       n->userdata = userdata;
+  259.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_iiwa_status.c:308: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 306 could be null and is dereferenced at line 308, column 5
+  306.       drake_lcmt_iiwa_status_subscription_t *n = (drake_lcmt_iiwa_status_subscription_t*)
+  307.                          malloc(sizeof(drake_lcmt_iiwa_status_subscription_t));
+  308. >     n->user_handler = f;
+  309.       n->userdata = userdata;
+  310.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_joint_pd_override.c:222: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 221 could be null and is dereferenced by call to `__drake_lcmt_joint_pd_override_clone_array()` at line 222, column 5
+  220.   {
+  221.       drake_lcmt_joint_pd_override *q = (drake_lcmt_joint_pd_override*) malloc(sizeof(drake_lcmt_joint_pd_override));
+  222. >     __drake_lcmt_joint_pd_override_clone_array(p, q, 1);
+  223.       return q;
+  224.   }
+
+drake/lcmtypes/drake_lcmt_joint_pd_override.c:277: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 275 could be null and is dereferenced at line 277, column 5
+  275.       drake_lcmt_joint_pd_override_subscription_t *n = (drake_lcmt_joint_pd_override_subscription_t*)
+  276.                          malloc(sizeof(drake_lcmt_joint_pd_override_subscription_t));
+  277. >     n->user_handler = f;
+  278.       n->userdata = userdata;
+  279.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_maliput_railcar_params_t.c:196: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 195 could be null and is dereferenced by call to `__drake_lcmt_maliput_railcar_params_t_clone_array()` at line 196, column 5
+  194.   {
+  195.       drake_lcmt_maliput_railcar_params_t *q = (drake_lcmt_maliput_railcar_params_t*) malloc(sizeof(drake_lcmt_maliput_railcar_params_t));
+  196. >     __drake_lcmt_maliput_railcar_params_t_clone_array(p, q, 1);
+  197.       return q;
+  198.   }
+
+drake/lcmtypes/drake_lcmt_maliput_railcar_params_t.c:251: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 249 could be null and is dereferenced at line 251, column 5
+  249.       drake_lcmt_maliput_railcar_params_t_subscription_t *n = (drake_lcmt_maliput_railcar_params_t_subscription_t*)
+  250.                          malloc(sizeof(drake_lcmt_maliput_railcar_params_t_subscription_t));
+  251. >     n->user_handler = f;
+  252.       n->userdata = userdata;
+  253.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_maliput_railcar_state_t.c:170: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 169 could be null and is dereferenced by call to `__drake_lcmt_maliput_railcar_state_t_clone_array()` at line 170, column 5
+  168.   {
+  169.       drake_lcmt_maliput_railcar_state_t *q = (drake_lcmt_maliput_railcar_state_t*) malloc(sizeof(drake_lcmt_maliput_railcar_state_t));
+  170. >     __drake_lcmt_maliput_railcar_state_t_clone_array(p, q, 1);
+  171.       return q;
+  172.   }
+
+drake/lcmtypes/drake_lcmt_maliput_railcar_state_t.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       drake_lcmt_maliput_railcar_state_t_subscription_t *n = (drake_lcmt_maliput_railcar_state_t_subscription_t*)
+  224.                          malloc(sizeof(drake_lcmt_maliput_railcar_state_t_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_piecewise_polynomial.c:257: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 255 could be null and is dereferenced at line 257, column 5
+  255.       drake_lcmt_piecewise_polynomial_subscription_t *n = (drake_lcmt_piecewise_polynomial_subscription_t*)
+  256.                          malloc(sizeof(drake_lcmt_piecewise_polynomial_subscription_t));
+  257. >     n->user_handler = f;
+  258.       n->userdata = userdata;
+  259.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_polynomial_matrix.c:264: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 262 could be null and is dereferenced at line 264, column 5
+  262.       drake_lcmt_polynomial_matrix_subscription_t *n = (drake_lcmt_polynomial_matrix_subscription_t*)
+  263.                          malloc(sizeof(drake_lcmt_polynomial_matrix_subscription_t));
+  264. >     n->user_handler = f;
+  265.       n->userdata = userdata;
+  266.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_polynomial.c:228: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 226 could be null and is dereferenced at line 228, column 5
+  226.       drake_lcmt_polynomial_subscription_t *n = (drake_lcmt_polynomial_subscription_t*)
+  227.                          malloc(sizeof(drake_lcmt_polynomial_subscription_t));
+  228. >     n->user_handler = f;
+  229.       n->userdata = userdata;
+  230.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_qp_controller_input.c:367: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 365 could be null and is dereferenced at line 367, column 5
+  365.       drake_lcmt_qp_controller_input_subscription_t *n = (drake_lcmt_qp_controller_input_subscription_t*)
+  366.                          malloc(sizeof(drake_lcmt_qp_controller_input_subscription_t));
+  367. >     n->user_handler = f;
+  368.       n->userdata = userdata;
+  369.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_qp_input.c:296: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 294 could be null and is dereferenced at line 296, column 5
+  294.       drake_lcmt_qp_input_subscription_t *n = (drake_lcmt_qp_input_subscription_t*)
+  295.                          malloc(sizeof(drake_lcmt_qp_input_subscription_t));
+  296. >     n->user_handler = f;
+  297.       n->userdata = userdata;
+  298.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_quadrotor_input_t.c:157: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 156 could be null and is dereferenced by call to `__drake_lcmt_quadrotor_input_t_clone_array()` at line 157, column 5
+  155.   {
+  156.       drake_lcmt_quadrotor_input_t *q = (drake_lcmt_quadrotor_input_t*) malloc(sizeof(drake_lcmt_quadrotor_input_t));
+  157. >     __drake_lcmt_quadrotor_input_t_clone_array(p, q, 1);
+  158.       return q;
+  159.   }
+
+drake/lcmtypes/drake_lcmt_quadrotor_input_t.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       drake_lcmt_quadrotor_input_t_subscription_t *n = (drake_lcmt_quadrotor_input_t_subscription_t*)
+  211.                          malloc(sizeof(drake_lcmt_quadrotor_input_t_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_quadrotor_output_t.c:303: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 301 could be null and is dereferenced at line 303, column 5
+  301.       drake_lcmt_quadrotor_output_t_subscription_t *n = (drake_lcmt_quadrotor_output_t_subscription_t*)
+  302.                          malloc(sizeof(drake_lcmt_quadrotor_output_t_subscription_t));
+  303. >     n->user_handler = f;
+  304.       n->userdata = userdata;
+  305.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_resolved_contact.c:371: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 369 could be null and is dereferenced at line 371, column 5
+  369.       drake_lcmt_resolved_contact_subscription_t *n = (drake_lcmt_resolved_contact_subscription_t*)
+  370.                          malloc(sizeof(drake_lcmt_resolved_contact_subscription_t));
+  371. >     n->user_handler = f;
+  372.       n->userdata = userdata;
+  373.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_robot_state.c:305: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 303 could be null and is dereferenced at line 305, column 5
+  303.       drake_lcmt_robot_state_subscription_t *n = (drake_lcmt_robot_state_subscription_t*)
+  304.                          malloc(sizeof(drake_lcmt_robot_state_subscription_t));
+  305. >     n->user_handler = f;
+  306.       n->userdata = userdata;
+  307.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_schunk_wsg_command.c:170: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 169 could be null and is dereferenced by call to `__drake_lcmt_schunk_wsg_command_clone_array()` at line 170, column 5
+  168.   {
+  169.       drake_lcmt_schunk_wsg_command *q = (drake_lcmt_schunk_wsg_command*) malloc(sizeof(drake_lcmt_schunk_wsg_command));
+  170. >     __drake_lcmt_schunk_wsg_command_clone_array(p, q, 1);
+  171.       return q;
+  172.   }
+
+drake/lcmtypes/drake_lcmt_schunk_wsg_command.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       drake_lcmt_schunk_wsg_command_subscription_t *n = (drake_lcmt_schunk_wsg_command_subscription_t*)
+  224.                          malloc(sizeof(drake_lcmt_schunk_wsg_command_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_schunk_wsg_status.c:183: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 182 could be null and is dereferenced by call to `__drake_lcmt_schunk_wsg_status_clone_array()` at line 183, column 5
+  181.   {
+  182.       drake_lcmt_schunk_wsg_status *q = (drake_lcmt_schunk_wsg_status*) malloc(sizeof(drake_lcmt_schunk_wsg_status));
+  183. >     __drake_lcmt_schunk_wsg_status_clone_array(p, q, 1);
+  184.       return q;
+  185.   }
+
+drake/lcmtypes/drake_lcmt_schunk_wsg_status.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       drake_lcmt_schunk_wsg_status_subscription_t *n = (drake_lcmt_schunk_wsg_status_subscription_t*)
+  237.                          malloc(sizeof(drake_lcmt_schunk_wsg_status_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_scope_data.c:264: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 262 could be null and is dereferenced at line 264, column 5
+  262.       drake_lcmt_scope_data_subscription_t *n = (drake_lcmt_scope_data_subscription_t*)
+  263.                          malloc(sizeof(drake_lcmt_scope_data_subscription_t));
+  264. >     n->user_handler = f;
+  265.       n->userdata = userdata;
+  266.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_simple_car_params_t.c:222: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 221 could be null and is dereferenced by call to `__drake_lcmt_simple_car_params_t_clone_array()` at line 222, column 5
+  220.   {
+  221.       drake_lcmt_simple_car_params_t *q = (drake_lcmt_simple_car_params_t*) malloc(sizeof(drake_lcmt_simple_car_params_t));
+  222. >     __drake_lcmt_simple_car_params_t_clone_array(p, q, 1);
+  223.       return q;
+  224.   }
+
+drake/lcmtypes/drake_lcmt_simple_car_params_t.c:277: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 275 could be null and is dereferenced at line 277, column 5
+  275.       drake_lcmt_simple_car_params_t_subscription_t *n = (drake_lcmt_simple_car_params_t_subscription_t*)
+  276.                          malloc(sizeof(drake_lcmt_simple_car_params_t_subscription_t));
+  277. >     n->user_handler = f;
+  278.       n->userdata = userdata;
+  279.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_simple_car_state_t.c:196: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 195 could be null and is dereferenced by call to `__drake_lcmt_simple_car_state_t_clone_array()` at line 196, column 5
+  194.   {
+  195.       drake_lcmt_simple_car_state_t *q = (drake_lcmt_simple_car_state_t*) malloc(sizeof(drake_lcmt_simple_car_state_t));
+  196. >     __drake_lcmt_simple_car_state_t_clone_array(p, q, 1);
+  197.       return q;
+  198.   }
+
+drake/lcmtypes/drake_lcmt_simple_car_state_t.c:251: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 249 could be null and is dereferenced at line 251, column 5
+  249.       drake_lcmt_simple_car_state_t_subscription_t *n = (drake_lcmt_simple_car_state_t_subscription_t*)
+  250.                          malloc(sizeof(drake_lcmt_simple_car_state_t_subscription_t));
+  251. >     n->user_handler = f;
+  252.       n->userdata = userdata;
+  253.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_simulation_command.c:254: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 252 could be null and is dereferenced at line 254, column 5
+  252.       drake_lcmt_simulation_command_subscription_t *n = (drake_lcmt_simulation_command_subscription_t*)
+  253.                          malloc(sizeof(drake_lcmt_simulation_command_subscription_t));
+  254. >     n->user_handler = f;
+  255.       n->userdata = userdata;
+  256.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_support_data.c:316: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 314 could be null and is dereferenced at line 316, column 5
+  314.       drake_lcmt_support_data_subscription_t *n = (drake_lcmt_support_data_subscription_t*)
+  315.                          malloc(sizeof(drake_lcmt_support_data_subscription_t));
+  316. >     n->user_handler = f;
+  317.       n->userdata = userdata;
+  318.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_viewer_command.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       drake_lcmt_viewer_command_subscription_t *n = (drake_lcmt_viewer_command_subscription_t*)
+  211.                          malloc(sizeof(drake_lcmt_viewer_command_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_viewer_draw.c:322: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 320 could be null and is dereferenced at line 322, column 5
+  320.       drake_lcmt_viewer_draw_subscription_t *n = (drake_lcmt_viewer_draw_subscription_t*)
+  321.                          malloc(sizeof(drake_lcmt_viewer_draw_subscription_t));
+  322. >     n->user_handler = f;
+  323.       n->userdata = userdata;
+  324.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_viewer_geometry_data.c:280: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 278 could be null and is dereferenced at line 280, column 5
+  278.       drake_lcmt_viewer_geometry_data_subscription_t *n = (drake_lcmt_viewer_geometry_data_subscription_t*)
+  279.                          malloc(sizeof(drake_lcmt_viewer_geometry_data_subscription_t));
+  280. >     n->user_handler = f;
+  281.       n->userdata = userdata;
+  282.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_viewer_link_data.c:241: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 239 could be null and is dereferenced at line 241, column 5
+  239.       drake_lcmt_viewer_link_data_subscription_t *n = (drake_lcmt_viewer_link_data_subscription_t*)
+  240.                          malloc(sizeof(drake_lcmt_viewer_link_data_subscription_t));
+  241. >     n->user_handler = f;
+  242.       n->userdata = userdata;
+  243.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_viewer_load_robot.c:215: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 213 could be null and is dereferenced at line 215, column 5
+  213.       drake_lcmt_viewer_load_robot_subscription_t *n = (drake_lcmt_viewer_load_robot_subscription_t*)
+  214.                          malloc(sizeof(drake_lcmt_viewer_load_robot_subscription_t));
+  215. >     n->user_handler = f;
+  216.       n->userdata = userdata;
+  217.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_whole_body_data.c:257: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 255 could be null and is dereferenced at line 257, column 5
+  255.       drake_lcmt_whole_body_data_subscription_t *n = (drake_lcmt_whole_body_data_subscription_t*)
+  256.                          malloc(sizeof(drake_lcmt_whole_body_data_subscription_t));
+  257. >     n->user_handler = f;
+  258.       n->userdata = userdata;
+  259.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_zmp_com_observer_state.c:183: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 182 could be null and is dereferenced by call to `__drake_lcmt_zmp_com_observer_state_clone_array()` at line 183, column 5
+  181.   {
+  182.       drake_lcmt_zmp_com_observer_state *q = (drake_lcmt_zmp_com_observer_state*) malloc(sizeof(drake_lcmt_zmp_com_observer_state));
+  183. >     __drake_lcmt_zmp_com_observer_state_clone_array(p, q, 1);
+  184.       return q;
+  185.   }
+
+drake/lcmtypes/drake_lcmt_zmp_com_observer_state.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       drake_lcmt_zmp_com_observer_state_subscription_t *n = (drake_lcmt_zmp_com_observer_state_subscription_t*)
+  237.                          malloc(sizeof(drake_lcmt_zmp_com_observer_state_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+drake/lcmtypes/drake_lcmt_zmp_data.c:621: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 619 could be null and is dereferenced at line 621, column 5
+  619.       drake_lcmt_zmp_data_subscription_t *n = (drake_lcmt_zmp_data_subscription_t*)
+  620.                          malloc(sizeof(drake_lcmt_zmp_data_subscription_t));
+  621. >     n->user_handler = f;
+  622.       n->userdata = userdata;
+  623.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/ipopt/Ipopt/src/Interfaces/IpStdFInterface.c:308: error: NULL_DEREFERENCE
+  pointer `cstr` last assigned on line 307 could be null and is dereferenced by call to `strncpy()` at line 308, column 3
+  306.     }
+  307.     cstr = (char*)malloc(sizeof(char)*(len+1));
+  308. >   strncpy(cstr, FSTR, len);
+  309.     cstr[len]='\0';
+  310.   
+
+/Users/kihongh/project/drake-distro/externals/ipopt/Ipopt/src/Interfaces/IpTNLPReducer.cpp:184: error: NULL_DEREFERENCE
+  pointer `x_start` last assigned on line 163 could be null and is dereferenced at line 184, column 22
+  182.             }
+  183.             if (index_x_fix_[count_x]==i) {
+  184. >             x_l[i] = x_start[i];
+  185.               x_u[i] = x_start[i];
+  186.               count_x++;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/getopt.c:218: error: NULL_DEREFERENCE
+  pointer `goo` last assigned on line 217 could be null and is dereferenced at line 218, column 5
+  216.   
+  217.       getopt_option_t *goo = (getopt_option_t*) calloc(1, sizeof(getopt_option_t));
+  218. >     goo->sname=strdup(sname);
+  219.       goo->lname=strdup(lname);
+  220.       goo->svalue=strdup(def ? "true" : "false");
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/getopt.c:206: error: NULL_DEREFERENCE
+  pointer `goo` last assigned on line 205 could be null and is dereferenced at line 206, column 5
+  204.   {
+  205.       getopt_option_t *goo = (getopt_option_t*) calloc(1, sizeof(getopt_option_t));
+  206. >     goo->spacer = 1;
+  207.       goo->help = strdup(s);
+  208.       g_ptr_array_add(gopt->options, goo);
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/getopt.c:241: error: NULL_DEREFERENCE
+  pointer `goo` last assigned on line 240 could be null and is dereferenced at line 241, column 5
+  239.   
+  240.       getopt_option_t *goo = (getopt_option_t*) calloc(1, sizeof(getopt_option_t));
+  241. >     goo->sname=strdup(sname);
+  242.       goo->lname=strdup(lname);
+  243.       goo->svalue=strdup(def);
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/getopt.c:23: error: NULL_DEREFERENCE
+  pointer `gopt` last assigned on line 22 could be null and is dereferenced at line 23, column 5
+  21.   {
+  22.       getopt_t *gopt = (getopt_t*) calloc(1, sizeof(getopt_t));
+  23. >     gopt->lopts = g_hash_table_new(g_str_hash, g_str_equal);
+  24.       gopt->sopts = g_hash_table_new(g_str_hash, g_str_equal);
+  25.       gopt->options = g_ptr_array_new();
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/lcm_tunnel.cpp:76: error: NULL_DEREFERENCE
+  pointer `rchannel` last assigned on line 75 could be null and is dereferenced by call to `sprintf()` at line 76, column 5
+  74.     if (lcm_channel && strlen(lcm_channel)) {
+  75.       char *rchannel = (char*) calloc(strlen(lcm_channel) + 3, sizeof(char));
+  76. >     sprintf(rchannel, "%c%s%c", '^', lcm_channel, '$');
+  77.   
+  78.       if (regex != NULL) {
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/introspect.c:102: error: NULL_DEREFERENCE
+  pointer `self` last assigned on line 101 could be null and is dereferenced by call to `memset()` at line 102, column 5
+  100.   {
+  101.       introspect_t * self = malloc(sizeof(introspect_t));
+  102. >     memset(self, 0, sizeof(introspect_t));
+  103.   
+  104.       self->ready = 0;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/udpm_util.c:124: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 122 could be null and is dereferenced at line 124, column 5
+  122.       lcm_buf_queue_t * q = (lcm_buf_queue_t *) malloc (sizeof (lcm_buf_queue_t));
+  123.   
+  124. >     q->head = NULL;
+  125.       q->tail = &q->head;
+  126.       q->count = 0;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/lcmgen.c:206: error: NULL_DEREFERENCE
+  pointer `lc` last assigned on line 205 could be null and is dereferenced at line 206, column 5
+  204.   {
+  205.       lcm_constant_t *lc = (lcm_constant_t*) calloc(1, sizeof(lcm_constant_t));
+  206. >     lc->lctypename = strdup(type);
+  207.       lc->membername = strdup(name);
+  208.       lc->val_str = strdup(val_str);
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/lcmgen.c:223: error: NULL_DEREFERENCE
+  pointer `le` last assigned on line 222 could be null and is dereferenced at line 223, column 5
+  221.   {
+  222.       lcm_enum_t *le = (lcm_enum_t*) calloc(1, sizeof(lcm_enum_t));
+  223. >     le->lcmfile  = strdup(lcmfile);
+  224.       le->enumname = lcm_typename_create(lcmgen, name);
+  225.       le->values   = g_ptr_array_new();
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/lcmgen.c:234: error: NULL_DEREFERENCE
+  pointer `lev` last assigned on line 232 could be null and is dereferenced at line 234, column 5
+  232.       lcm_enum_value_t *lev = (lcm_enum_value_t*) calloc(1, sizeof(lcm_enum_t));
+  233.   
+  234. >     lev->valuename = strdup(name);
+  235.   
+  236.       return lev;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/eventlog.c:34: error: NULL_DEREFERENCE
+  pointer `l` last assigned on line 32 could be null and is dereferenced at line 34, column 5
+  32.       lcm_eventlog_t *l = (lcm_eventlog_t*) calloc(1, sizeof(lcm_eventlog_t));
+  33.   
+  34. >     l->f = fopen(path, mode);
+  35.       if (l->f == NULL) {
+  36.           free (l);
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/udpm_util.c:189: error: NULL_DEREFERENCE
+  pointer `nbuf` last assigned on line 188 could be null and is dereferenced by call to `lcm_buf_enqueue()` at line 189, column 14
+  187.            for (i = 0; i < LCM_DEFAULT_RECV_BUFS; i++) {
+  188.                lcm_buf_t * nbuf = (lcm_buf_t *) calloc(1, sizeof(lcm_buf_t));
+  189. >              lcm_buf_enqueue(inbufs_empty, nbuf);
+  190.            }
+  191.        }
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/udpm_util.c:198: error: NULL_DEREFERENCE
+  pointer `lcmb` last assigned on line 193 could be null and is dereferenced at line 198, column 5
+  196.       // allocate space on the ringbuffer for the packet data.
+  197.       // give it the maximum possible size for an unfragmented packet
+  198. >     lcmb->buf = lcm_ringbuf_alloc(*ringbuf, LCM_MAX_UNFRAGMENTED_PACKET_SIZE);
+  199.       if (lcmb->buf == NULL) {
+  200.            // ringbuffer is full.  allocate a larger ringbuffer
+
+/Users/kihongh/project/drake-distro/externals/ipopt/Ipopt/src/Interfaces/IpStdFInterface.c:245: error: NULL_DEREFERENCE
+  pointer `fuser_data` last assigned on line 242 could be null and is dereferenced at line 245, column 3
+  243.   
+  244.     /* First create a new IpoptProblem object; if that fails return 0 */
+  245. >   fuser_data->Problem =
+  246.       CreateIpoptProblem(n, X_L, X_U, m, G_L, G_U, nele_jac, nele_hess, 
+  247.   		       index_style, eval_f, eval_g, eval_grad_f, 
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/eventlog.c:78: error: NULL_DEREFERENCE
+  pointer `le` last assigned on line 54 could be null and is dereferenced at line 78, column 9
+  76.   
+  77.       // Sanity check the channel length and data length
+  78. >     if (le->channellen <= 0 || le->channellen >= 1000) {
+  79.           fprintf(stderr, "Log event has invalid channel length: %d\n", le->channellen);
+  80.           free(le);
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/udpm_util.c:74: error: NULL_DEREFERENCE
+  pointer `store` last assigned on line 72 could be null and is dereferenced at line 74, column 5
+  72.       lcm_frag_buf_store * store = (lcm_frag_buf_store *) calloc(1,
+  73.               sizeof(lcm_frag_buf_store));
+  74. >     store->total_size = 0;
+  75.       store->max_total_size = max_total_size;
+  76.       store->max_n_frag_bufs = max_n_frag_bufs;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_file.c:175: error: NULL_DEREFERENCE
+  pointer `lr` last assigned on line 174 could be null and is dereferenced at line 175, column 5
+  173.   
+  174.       lcm_logprov_t * lr = (lcm_logprov_t *) calloc (1, sizeof (lcm_logprov_t));
+  175. >     lr->lcm = parent;
+  176.       lr->filename = strdup(target);
+  177.       lr->speed = 1;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_file.c:337: error: NULL_DEREFERENCE
+  pointer `le` last assigned on line 336 could be null and is dereferenced by call to `memset()` at line 337, column 5
+  335.   
+  336.       lcm_eventlog_event_t *le = (lcm_eventlog_event_t*) malloc(mem_sz);
+  337. >     memset(le, 0, mem_sz);
+  338.   
+  339.       GTimeVal tv;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/lcmgen.c:242: error: NULL_DEREFERENCE
+  pointer `lm` last assigned on line 241 could be null and is dereferenced at line 242, column 5
+  240.   {
+  241.       lcm_member_t *lm = (lcm_member_t*) calloc(1, sizeof(lcm_member_t));
+  242. >     lm->dimensions = g_ptr_array_new();
+  243.       return lm;
+  244.   }
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_memq.c:78: error: NULL_DEREFERENCE
+  pointer `self` last assigned on line 77 could be null and is dereferenced at line 78, column 5
+  76.   {
+  77.       lcm_memq_t * self = (lcm_memq_t*) calloc(1, sizeof(lcm_memq_t));
+  78. >     self->lcm = parent;
+  79.       self->queue = g_queue_new();
+  80.       self->mutex = g_mutex_new();
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_mpudpm.c:867: error: NULL_DEREFERENCE
+  pointer `sub` last assigned on line 865 could be null and is dereferenced at line 867, column 5
+  865.       mpudpm_subscriber_t *sub = (mpudpm_subscriber_t *) calloc(1,
+  866.               sizeof(mpudpm_subscriber_t));
+  867. >     sub->channel_string = strdup(channel);
+  868.       // hashmap is used as a set. Will need to free keys, but not values
+  869.       sub->channel_set = g_hash_table_new_full(g_str_hash, g_str_equal, free,
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/ringbuffer.c:81: error: NULL_DEREFERENCE
+  pointer `ring` last assigned on line 80 could be null and is dereferenced at line 81, column 5
+  79.   
+  80.       ring = (lcm_ringbuf_t *) malloc (sizeof (lcm_ringbuf_t));
+  81. >     ring->data = (char*) malloc (ring_size);
+  82.       ring->size = ring_size;
+  83.       ring->used = 0;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/lcmgen.c:194: error: NULL_DEREFERENCE
+  pointer `lr` last assigned on line 193 could be null and is dereferenced at line 194, column 5
+  192.   {
+  193.       lcm_struct_t *lr = (lcm_struct_t*) calloc(1, sizeof(lcm_struct_t));
+  194. >     lr->lcmfile    = strdup(lcmfile);
+  195.       lr->structname = lcm_typename_create(lcmgen, structname);
+  196.       lr->members    = g_ptr_array_new();
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm.c:313: error: NULL_DEREFERENCE
+  pointer `h` last assigned on line 312 could be null and is dereferenced at line 313, column 5
+  311.       // create and populate a new message handler struct
+  312.       lcm_subscription_t *h = (lcm_subscription_t*)calloc (1, sizeof (lcm_subscription_t));
+  313. >     h->channel = strdup(channel);
+  314.       h->handler = handler;
+  315.       h->userdata = userdata;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_tcpq.c:207: error: NULL_DEREFERENCE
+  pointer `self` last assigned on line 206 could be null and is dereferenced at line 207, column 5
+  205.   
+  206.       lcm_tcpq_t * self = (lcm_tcpq_t *) calloc (1, sizeof (lcm_tcpq_t));
+  207. >     self->lcm = parent;
+  208.       self->socket = -1;
+  209.       self->server_port = htons(7700);
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/lcm_tunnel_disconnect_msg_t.c:142: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 141 could be null and is dereferenced by call to `__lcm_tunnel_disconnect_msg_t_clone_array()` at line 142, column 5
+  140.   {
+  141.       lcm_tunnel_disconnect_msg_t *q = (lcm_tunnel_disconnect_msg_t*) malloc(sizeof(lcm_tunnel_disconnect_msg_t));
+  142. >     __lcm_tunnel_disconnect_msg_t_clone_array(p, q, 1);
+  143.       return q;
+  144.   }
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/lcm_tunnel_disconnect_msg_t.c:197: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 195 could be null and is dereferenced at line 197, column 5
+  195.       lcm_tunnel_disconnect_msg_t_subscription_t *n = (lcm_tunnel_disconnect_msg_t_subscription_t*)
+  196.                          malloc(sizeof(lcm_tunnel_disconnect_msg_t_subscription_t));
+  197. >     n->user_handler = f;
+  198.       n->userdata = userdata;
+  199.       n->lc_h = lcm_subscribe (lcm, channel, 
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/lcm_tunnel_params_t.c:262: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 260 could be null and is dereferenced at line 262, column 5
+  260.       lcm_tunnel_params_t_subscription_t *n = (lcm_tunnel_params_t_subscription_t*)
+  261.                          malloc(sizeof(lcm_tunnel_params_t_subscription_t));
+  262. >     n->user_handler = f;
+  263.       n->userdata = userdata;
+  264.       n->lc_h = lcm_subscribe (lcm, channel, 
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/lcm_tunnel_sub_msg_t.c:226: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 224 could be null and is dereferenced at line 226, column 5
+  224.       lcm_tunnel_sub_msg_t_subscription_t *n = (lcm_tunnel_sub_msg_t_subscription_t*)
+  225.                          malloc(sizeof(lcm_tunnel_sub_msg_t_subscription_t));
+  226. >     n->user_handler = f;
+  227.       n->userdata = userdata;
+  228.       n->lc_h = lcm_subscribe (lcm, channel, 
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/lcm_tunnel_udp_msg_t.c:252: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 250 could be null and is dereferenced at line 252, column 5
+  250.       lcm_tunnel_udp_msg_t_subscription_t *n = (lcm_tunnel_udp_msg_t_subscription_t*)
+  251.                          malloc(sizeof(lcm_tunnel_udp_msg_t_subscription_t));
+  252. >     n->user_handler = f;
+  253.       n->userdata = userdata;
+  254.       n->lc_h = lcm_subscribe (lcm, channel, 
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/lcmgen.c:153: error: NULL_DEREFERENCE
+  pointer `lt` last assigned on line 151 could be null and is dereferenced at line 153, column 5
+  151.       lcm_typename_t *lt = (lcm_typename_t*) calloc(1, sizeof(lcm_typename_t));
+  152.   
+  153. >     lt->lctypename = strdup(lctypename);
+  154.   
+  155.       // package name: everything before the last ".", or "" if there is no "."
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_java.c:51: error: NULL_DEREFERENCE
+  pointer `dirpath` last assigned on line 50 could be null and is dereferenced by call to `strncpy()` at line 51, column 13
+  49.           if (path[i]=='/') {
+  50.               char *dirpath = (char *) malloc(i+1);
+  51. >             strncpy(dirpath, path, i);
+  52.               dirpath[i]=0;
+  53.   
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_csharp.c:51: error: NULL_DEREFERENCE
+  pointer `dirpath` last assigned on line 50 could be null and is dereferenced by call to `strncpy()` at line 51, column 13
+  49.           if (path[i]=='/') {
+  50.               char *dirpath = (char *) malloc(i+1);
+  51. >             strncpy(dirpath, path, i);
+  52.               dirpath[i]=0;
+  53.   
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_cpp.c:84: error: NULL_DEREFERENCE
+  pointer `dirpath` last assigned on line 83 could be null and is dereferenced by call to `strncpy()` at line 84, column 13
+  82.           if (path[i]=='/') {
+  83.               char *dirpath = (char *) malloc(i+1);
+  84. >             strncpy(dirpath, path, i);
+  85.               dirpath[i]=0;
+  86.   
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_memq.c:32: error: NULL_DEREFERENCE
+  pointer `msg` last assigned on line 31 could be null and is dereferenced at line 32, column 5
+  30.   memq_msg_new(lcm_t* lcm, const char* channel, const void* data, int data_size, int64_t utime) {
+  31.       memq_msg_t* msg = (memq_msg_t*)malloc(sizeof(memq_msg_t));
+  32. >     msg->rbuf.data = malloc(data_size);
+  33.       msg->rbuf.data_size = data_size;
+  34.       memcpy(msg->rbuf.data, data, data_size);
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_memq.c:34: error: NULL_DEREFERENCE
+  pointer `msg->rbuf.data` last assigned on line 32 could be null and is dereferenced by call to `memcpy()` at line 34, column 5
+  32.       msg->rbuf.data = malloc(data_size);
+  33.       msg->rbuf.data_size = data_size;
+  34. >     memcpy(msg->rbuf.data, data, data_size);
+  35.       msg->rbuf.recv_utime = utime;
+  36.       msg->rbuf.lcm = lcm;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm-logger/lcm_logger.c:335: error: NULL_DEREFERENCE
+  pointer `le` last assigned on line 334 could be null and is dereferenced by call to `memset()` at line 335, column 5
+  333.       // queue up the message for writing to disk by the write thread
+  334.       lcm_eventlog_event_t *le = (lcm_eventlog_event_t*) malloc(mem_sz);
+  335. >     memset(le, 0, mem_sz);
+  336.   
+  337.       le->timestamp = rbuf->recv_utime;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_python.c:44: error: NULL_DEREFERENCE
+  pointer `dirpath` last assigned on line 43 could be null and is dereferenced by call to `strncpy()` at line 44, column 13
+  42.           if (path[i]=='/') {
+  43.               char *dirpath = (char *) malloc(i+1);
+  44. >             strncpy(dirpath, path, i);
+  45.               dirpath[i]=0;
+  46.   
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_lua.c:45: error: NULL_DEREFERENCE
+  pointer `dirpath` last assigned on line 44 could be null and is dereferenced by call to `strncpy()` at line 45, column 13
+  43.           if (path[i]=='/') {
+  44.               char *dirpath = (char *) malloc(i+1);
+  45. >             strncpy(dirpath, path, i);
+  46.               dirpath[i]=0;
+  47.   
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm-logger/glib_util.c:248: error: NULL_DEREFERENCE
+  pointer `dirpath` last assigned on line 247 could be null and is dereferenced by call to `strncpy()` at line 248, column 13
+  246.           if (path[i]=='/') {
+  247.               char *dirpath = (char *) malloc(i+1);
+  248. >             strncpy(dirpath, path, i);
+  249.               dirpath[i]=0;
+  250.   
+
+/Users/kihongh/project/drake-distro/externals/ipopt/ThirdParty/Mumps/MUMPS/src/mumps_io.c:193: error: NULL_DEREFERENCE
+  pointer `flag_tab_loc` last assigned on line 191 could be null and is dereferenced at line 193, column 5
+  191.     flag_tab_loc=(int *)malloc(nb_file_type_loc*sizeof(int));
+  192.     for (i=0;i<nb_file_type_loc;i++){
+  193. >     flag_tab_loc[i]=(int)flag_tab[i];
+  194.     }
+  195.   #if defined(MUMPS_WIN32)
+
+/Users/kihongh/project/drake-distro/externals/ipopt/ThirdParty/Mumps/MUMPS/src/mumps_io.c:544: error: NULL_DEREFERENCE
+  pointer `dim_loc` last assigned on line 542 could be null and is dereferenced at line 544, column 5
+  542.     dim_loc=(int *)malloc(*nb_file_type*sizeof(int));
+  543.     for(i=0;i<nb_file_type_loc;i++){
+  544. >     dim_loc[i]=(int)dim[i];
+  545.     }
+  546.     *ierr=(MUMPS_INT)mumps_io_alloc_pointers(&nb_file_type_loc,dim_loc);
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_client/param_internal.c:363: error: NULL_DEREFERENCE
+  pointer `el` last assigned on line 362 could be null and is dereferenced by call to `memset()` at line 363, column 3
+  361.   
+  362.     el = malloc(sizeof(BotParamElement));
+  363. >   memset(el, 0, sizeof(BotParamElement));
+  364.     if (name)
+  365.       el->name = strdup(name);
+
+/Users/kihongh/project/drake-distro/externals/nlopt/api/options.c:127: error: NULL_DEREFERENCE
+  pointer `nopt` last assigned on line 126 could be null and is dereferenced at line 127, column 4
+  125.   	  nlopt_munge munge;
+  126.   	  nopt = (nlopt_opt) malloc(sizeof(struct nlopt_opt_s));
+  127. > 	  *nopt = *opt;
+  128.   	  nopt->lb = nopt->ub = nopt->xtol_abs = NULL;
+  129.   	  nopt->fc = nopt->h = NULL;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/lcmgen.c:138: error: NULL_DEREFERENCE
+  pointer `lcmgen` last assigned on line 137 could be null and is dereferenced at line 138, column 5
+  136.   {
+  137.       lcmgen_t *lcmgen = (lcmgen_t*) calloc(1, sizeof(lcmgen_t));
+  138. >     lcmgen->structs = g_ptr_array_new();
+  139.       lcmgen->enums = g_ptr_array_new();
+  140.       lcmgen->package = strdup("");
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_c.c:432: error: NULL_DEREFERENCE
+  pointer `tmp` last assigned on line 427 could be null and is dereferenced by call to `sprintf()` at line 432, column 19
+  430.           sprintf(tmp, "&(%s[element].%s)", n, lm->membername);
+  431.       } else {
+  432. >         int pos = sprintf(tmp, "%s[element].%s", n, lm->membername);
+  433.           for (unsigned int d = 0; d < dim; d++) {
+  434.               pos += sprintf(&tmp[pos], "[%c]", d + 'a');
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_c.c:430: error: NULL_DEREFERENCE
+  pointer `tmp` last assigned on line 427 could be null and is dereferenced by call to `sprintf()` at line 430, column 9
+  428.   
+  429.       if (g_ptr_array_size(lm->dimensions) == 0) {
+  430. >         sprintf(tmp, "&(%s[element].%s)", n, lm->membername);
+  431.       } else {
+  432.           int pos = sprintf(tmp, "%s[element].%s", n, lm->membername);
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/lcm_tunnel.cpp:483: error: NULL_DEREFERENCE
+  pointer `self->buf` last assigned on line 462 could be null and is dereferenced at line 483, column 27
+  481.     switch (self->tunnel_state) {
+  482.     case CLIENT_MSG_SZ:
+  483. >     self->bytes_to_read = ntohl(*(uint32_t*) self->buf);
+  484.       self->tunnel_state = CLIENT_MSG_DATA;
+  485.       break;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_java.c:81: error: NULL_DEREFERENCE
+  pointer `p` last assigned on line 80 could be null and is dereferenced at line 81, column 5
+  79.   {
+  80.       primitive_info_t *p = (primitive_info_t*) calloc(sizeof(primitive_info_t), 1);
+  81. >     p->storage = storage;
+  82.       p->decode = decode;
+  83.       p->encode = encode;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/emit_csharp.c:83: error: NULL_DEREFERENCE
+  pointer `p` last assigned on line 82 could be null and is dereferenced at line 83, column 5
+  81.   {
+  82.       primitive_info_t *p = (primitive_info_t*) calloc(sizeof(primitive_info_t), 1);
+  83. >     p->storage = storage;
+  84.       p->decode = decode;
+  85.       p->encode = encode;
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/src/deputy/procman.c:546: error: NULL_DEREFERENCE
+  pointer `pcmd` last assigned on line 545 could be null and is dereferenced at line 546, column 5
+  544.   {
+  545.       procman_cmd_t *pcmd = (procman_cmd_t*)calloc(1, sizeof (procman_cmd_t));
+  546. >     pcmd->cmd = g_string_new ("");
+  547.       pcmd->cmd_id = cmd_id;
+  548.       pcmd->cmd_name = g_strdup(cmd_name);
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_mpudpm.c:1002: error: NULL_DEREFERENCE
+  pointer `msg->mapping` last assigned on line 989 could be null and is dereferenced at line 1002, column 9
+  1000.               continue;
+  1001.           }
+  1002. >         msg->mapping[ind].channel = strdup(channel);
+  1003.           msg->mapping[ind].port = (int16_t)port; // cast to int16_t for LCM
+  1004.           ind++;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_mpudpm.c:987: error: NULL_DEREFERENCE
+  pointer `msg` last assigned on line 985 could be null and is dereferenced at line 987, column 5
+  985.       channel_port_map_update_t* msg = (channel_port_map_update_t*) calloc(1,
+  986.               sizeof(channel_port_map_update_t));
+  987. >     msg->num_ports = lcm->params.num_mc_ports;
+  988.       int table_size = g_hash_table_size(lcm->channel_to_port_map);
+  989.       msg->mapping = (channel_to_port_t*) calloc(table_size,
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-param/src/param_server/param_server.c:41: error: NULL_DEREFERENCE
+  pointer `update_msg` last assigned on line 33 could be null and is dereferenced at line 41, column 3
+  39.     }
+  40.   
+  41. >   update_msg->utime = _timestamp_now();
+  42.     update_msg->server_id = self->id;
+  43.     update_msg->sequence_number = self->seqNo;
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_grasp_transition_state_t.c:309: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 307 could be null and is dereferenced at line 309, column 5
+  307.       robotlocomotion_grasp_transition_state_t_subscription_t *n = (robotlocomotion_grasp_transition_state_t_subscription_t*)
+  308.                          malloc(sizeof(robotlocomotion_grasp_transition_state_t_subscription_t));
+  309. >     n->user_handler = f;
+  310.       n->userdata = userdata;
+  311.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_header_t.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       robotlocomotion_header_t_subscription_t *n = (robotlocomotion_header_t_subscription_t*)
+  224.                          malloc(sizeof(robotlocomotion_header_t_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_plan_control_t.c:157: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 156 could be null and is dereferenced by call to `__robotlocomotion_plan_control_t_clone_array()` at line 157, column 5
+  155.   {
+  156.       robotlocomotion_plan_control_t *q = (robotlocomotion_plan_control_t*) malloc(sizeof(robotlocomotion_plan_control_t));
+  157. >     __robotlocomotion_plan_control_t_clone_array(p, q, 1);
+  158.       return q;
+  159.   }
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_plan_control_t.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       robotlocomotion_plan_control_t_subscription_t *n = (robotlocomotion_plan_control_t_subscription_t*)
+  211.                          malloc(sizeof(robotlocomotion_plan_control_t_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_plan_status_t.c:222: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 221 could be null and is dereferenced by call to `__robotlocomotion_plan_status_t_clone_array()` at line 222, column 5
+  220.   {
+  221.       robotlocomotion_plan_status_t *q = (robotlocomotion_plan_status_t*) malloc(sizeof(robotlocomotion_plan_status_t));
+  222. >     __robotlocomotion_plan_status_t_clone_array(p, q, 1);
+  223.       return q;
+  224.   }
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_plan_status_t.c:277: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 275 could be null and is dereferenced at line 277, column 5
+  275.       robotlocomotion_plan_status_t_subscription_t *n = (robotlocomotion_plan_status_t_subscription_t*)
+  276.                          malloc(sizeof(robotlocomotion_plan_status_t_subscription_t));
+  277. >     n->user_handler = f;
+  278.       n->userdata = userdata;
+  279.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_point_t.c:170: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 169 could be null and is dereferenced by call to `__robotlocomotion_point_t_clone_array()` at line 170, column 5
+  168.   {
+  169.       robotlocomotion_point_t *q = (robotlocomotion_point_t*) malloc(sizeof(robotlocomotion_point_t));
+  170. >     __robotlocomotion_point_t_clone_array(p, q, 1);
+  171.       return q;
+  172.   }
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_point_t.c:225: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 223 could be null and is dereferenced at line 225, column 5
+  223.       robotlocomotion_point_t_subscription_t *n = (robotlocomotion_point_t_subscription_t*)
+  224.                          malloc(sizeof(robotlocomotion_point_t_subscription_t));
+  225. >     n->user_handler = f;
+  226.       n->userdata = userdata;
+  227.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_pose_stamped_t.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       robotlocomotion_pose_stamped_t_subscription_t *n = (robotlocomotion_pose_stamped_t_subscription_t*)
+  211.                          malloc(sizeof(robotlocomotion_pose_stamped_t_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_pose_t.c:157: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 156 could be null and is dereferenced by call to `__robotlocomotion_pose_t_clone_array()` at line 157, column 5
+  155.   {
+  156.       robotlocomotion_pose_t *q = (robotlocomotion_pose_t*) malloc(sizeof(robotlocomotion_pose_t));
+  157. >     __robotlocomotion_pose_t_clone_array(p, q, 1);
+  158.       return q;
+  159.   }
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_pose_t.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       robotlocomotion_pose_t_subscription_t *n = (robotlocomotion_pose_t_subscription_t*)
+  211.                          malloc(sizeof(robotlocomotion_pose_t_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_quaternion_t.c:183: error: NULL_DEREFERENCE
+  pointer `q` last assigned on line 182 could be null and is dereferenced by call to `__robotlocomotion_quaternion_t_clone_array()` at line 183, column 5
+  181.   {
+  182.       robotlocomotion_quaternion_t *q = (robotlocomotion_quaternion_t*) malloc(sizeof(robotlocomotion_quaternion_t));
+  183. >     __robotlocomotion_quaternion_t_clone_array(p, q, 1);
+  184.       return q;
+  185.   }
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_quaternion_t.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       robotlocomotion_quaternion_t_subscription_t *n = (robotlocomotion_quaternion_t_subscription_t*)
+  237.                          malloc(sizeof(robotlocomotion_quaternion_t_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_residual_observer_state_t.c:292: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 290 could be null and is dereferenced at line 292, column 5
+  290.       robotlocomotion_residual_observer_state_t_subscription_t *n = (robotlocomotion_residual_observer_state_t_subscription_t*)
+  291.                          malloc(sizeof(robotlocomotion_residual_observer_state_t_subscription_t));
+  292. >     n->user_handler = f;
+  293.       n->userdata = userdata;
+  294.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_robot_plan_t.c:367: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 365 could be null and is dereferenced at line 367, column 5
+  365.       robotlocomotion_robot_plan_t_subscription_t *n = (robotlocomotion_robot_plan_t_subscription_t*)
+  366.                          malloc(sizeof(robotlocomotion_robot_plan_t_subscription_t));
+  367. >     n->user_handler = f;
+  368.       n->userdata = userdata;
+  369.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_robot_plan_w_keyframes_t.c:373: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 371 could be null and is dereferenced at line 373, column 5
+  371.       robotlocomotion_robot_plan_w_keyframes_t_subscription_t *n = (robotlocomotion_robot_plan_w_keyframes_t_subscription_t*)
+  372.                          malloc(sizeof(robotlocomotion_robot_plan_w_keyframes_t_subscription_t));
+  373. >     n->user_handler = f;
+  374.       n->userdata = userdata;
+  375.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_robot_plan_with_supports_t.c:238: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 236 could be null and is dereferenced at line 238, column 5
+  236.       robotlocomotion_robot_plan_with_supports_t_subscription_t *n = (robotlocomotion_robot_plan_with_supports_t_subscription_t*)
+  237.                          malloc(sizeof(robotlocomotion_robot_plan_with_supports_t_subscription_t));
+  238. >     n->user_handler = f;
+  239.       n->userdata = userdata;
+  240.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_support_body_t.c:303: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 301 could be null and is dereferenced at line 303, column 5
+  301.       robotlocomotion_support_body_t_subscription_t *n = (robotlocomotion_support_body_t_subscription_t*)
+  302.                          malloc(sizeof(robotlocomotion_support_body_t_subscription_t));
+  303. >     n->user_handler = f;
+  304.       n->userdata = userdata;
+  305.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_support_element_t.c:228: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 226 could be null and is dereferenced at line 228, column 5
+  226.       robotlocomotion_support_element_t_subscription_t *n = (robotlocomotion_support_element_t_subscription_t*)
+  227.                          malloc(sizeof(robotlocomotion_support_element_t_subscription_t));
+  228. >     n->user_handler = f;
+  229.       n->userdata = userdata;
+  230.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_support_sequence_t.c:244: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 242 could be null and is dereferenced at line 244, column 5
+  242.       robotlocomotion_support_sequence_t_subscription_t *n = (robotlocomotion_support_sequence_t_subscription_t*)
+  243.                          malloc(sizeof(robotlocomotion_support_sequence_t_subscription_t));
+  244. >     n->user_handler = f;
+  245.       n->userdata = userdata;
+  246.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_viewer2_comms_t.c:267: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 265 could be null and is dereferenced at line 267, column 5
+  265.       robotlocomotion_viewer2_comms_t_subscription_t *n = (robotlocomotion_viewer2_comms_t_subscription_t*)
+  266.                          malloc(sizeof(robotlocomotion_viewer2_comms_t_subscription_t));
+  267. >     n->user_handler = f;
+  268.       n->userdata = userdata;
+  269.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_viewer_command_t.c:212: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 210 could be null and is dereferenced at line 212, column 5
+  210.       robotlocomotion_viewer_command_t_subscription_t *n = (robotlocomotion_viewer_command_t_subscription_t*)
+  211.                          malloc(sizeof(robotlocomotion_viewer_command_t_subscription_t));
+  212. >     n->user_handler = f;
+  213.       n->userdata = userdata;
+  214.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_viewer_draw_t.c:322: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 320 could be null and is dereferenced at line 322, column 5
+  320.       robotlocomotion_viewer_draw_t_subscription_t *n = (robotlocomotion_viewer_draw_t_subscription_t*)
+  321.                          malloc(sizeof(robotlocomotion_viewer_draw_t_subscription_t));
+  322. >     n->user_handler = f;
+  323.       n->userdata = userdata;
+  324.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_viewer_geometry_data_t.c:280: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 278 could be null and is dereferenced at line 280, column 5
+  278.       robotlocomotion_viewer_geometry_data_t_subscription_t *n = (robotlocomotion_viewer_geometry_data_t_subscription_t*)
+  279.                          malloc(sizeof(robotlocomotion_viewer_geometry_data_t_subscription_t));
+  280. >     n->user_handler = f;
+  281.       n->userdata = userdata;
+  282.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_viewer_link_data_t.c:241: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 239 could be null and is dereferenced at line 241, column 5
+  239.       robotlocomotion_viewer_link_data_t_subscription_t *n = (robotlocomotion_viewer_link_data_t_subscription_t*)
+  240.                          malloc(sizeof(robotlocomotion_viewer_link_data_t_subscription_t));
+  241. >     n->user_handler = f;
+  242.       n->userdata = userdata;
+  243.       n->lc_h = lcm_subscribe (lcm, channel,
+
+externals/robotlocomotion_lcmtypes/lcmtypes/robotlocomotion_viewer_load_robot_t.c:215: error: NULL_DEREFERENCE
+  pointer `n` last assigned on line 213 could be null and is dereferenced at line 215, column 5
+  213.       robotlocomotion_viewer_load_robot_t_subscription_t *n = (robotlocomotion_viewer_load_robot_t_subscription_t*)
+  214.                          malloc(sizeof(robotlocomotion_viewer_load_robot_t_subscription_t));
+  215. >     n->user_handler = f;
+  216.       n->userdata = userdata;
+  217.       n->lc_h = lcm_subscribe (lcm, channel,
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcm/lcm_mpudpm.c:1645: error: NULL_DEREFERENCE
+  pointer `lcmb` last assigned on line 1644 could be null and is dereferenced by call to `lcm_buf_enqueue()` at line 1645, column 9
+  1643.            * will be taken from the ringbuffer at receive time. */
+  1644.           lcm_buf_t * lcmb = (lcm_buf_t *) calloc (1, sizeof (lcm_buf_t));
+  1645. >         lcm_buf_enqueue (lcm->inbufs_empty, lcmb);
+  1646.       }
+  1647.   
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-lcm-utils/src/tunnel/ssocket.c:28: error: NULL_DEREFERENCE
+  pointer `s` last assigned on line 27 could be null and is dereferenced at line 28, column 5
+  26.   {
+  27.       ssocket_t *s = (ssocket_t*) calloc(1, sizeof(ssocket_t));
+  28. >     s->socket = -1;
+  29.   
+  30.       return s;
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/tokenize.c:38: error: NULL_DEREFERENCE
+  pointer `t` last assigned on line 37 could be null and is dereferenced at line 38, column 5
+  36.   {
+  37.       tokenize_t *t = (tokenize_t*) calloc(1, sizeof(tokenize_t));
+  38. >     t->path = strdup(path);
+  39.       t->f = fopen(path, "r");
+  40.   
+
+
+2. Missing null check after strdup
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/getopt.c:51: error: NULL_DEREFERENCE
+  pointer `arg` last assigned on line 50 could be null and is dereferenced by call to `strstr()` at line 51, column 20
+  49.       for (int i = 1; i < argc; i++) {
+  50.           char *arg = strdup(argv[i]);
+  51. >         char *eq = strstr(arg, "=");
+  52.   
+  53.           // no equal sign? Push the whole thing.
+
+/Users/kihongh/project/drake-distro/externals/lcm/lcmgen/lcmgen.c:161: error: NULL_DEREFERENCE
+  pointer `tmp` last assigned on line 160 could be null and is dereferenced by call to `strrchr()` at line 161, column 18
+  159.       //
+  160.       char *tmp = strdup(lctypename);
+  161. >     char *rtmp = strrchr(tmp, '.');
+  162.       if (rtmp == NULL) {
+  163.           lt->shortname = tmp;
+
+
+3. Missing null check after getenv
+
+/Users/kihongh/project/drake-distro/externals/libbot/bot2-procman/src/deputy/procman.c:101: error: NULL_DEREFERENCE
+  pointer `path` last assigned on line 100 could be null and is dereferenced by call to `strlen()` at line 101, column 22
+  99.       // TODO check and see if it's already there
+  100.       char *path = getenv ("PATH");
+  101. >     int newpathlen = strlen (path) + strlen(params->bin_path) + 2;
+  102.       char *newpath = calloc(1, newpathlen);
+  103.       sprintf (newpath, "%s:%s", params->bin_path, path);
+
+
+4. Missing null check after fopen
+
+/Users/kihongh/project/drake-distro/externals/ipopt/Ipopt/src/Algorithm/LinearSolvers/IpPardisoSolverInterface.cpp:639: error: NULL_DEREFERENCE
+  pointer `mat_file` last assigned on line 637 could be null and is dereferenced by call to `fprintf()` at line 639, column 7
+  637.         mat_file = fopen (mat_name, "w");
+  638.   
+  639. >       fprintf (mat_file, "%d\n", N);
+  640.         fprintf (mat_file, "%d\n", NNZ);
+  641.   
+
+
+5. Others
+
+/Users/kihongh/project/drake-distro/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.cpp:371: error: NULL_DEREFERENCE
+  pointer `compressed_pos_` last assigned on line 356 could be null and is dereferenced at line 371, column 7
+  369.         DBG_ASSERT(ExpPos[i]-offset<NRows() && ExpPos[i]-offset>=0);
+  370.         expanded_pos_[i]=ExpPos[i]-offset;
+  371. >       compressed_pos_[ExpPos[i]-offset] = i;
+  372.       }
+  373.     }
+
+/Users/kihongh/project/drake-distro/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.cpp:370: error: NULL_DEREFERENCE
+  pointer `expanded_pos_` last assigned on line 355 could be null and is dereferenced at line 370, column 7
+  368.         //ToDo decide for offset
+  369.         DBG_ASSERT(ExpPos[i]-offset<NRows() && ExpPos[i]-offset>=0);
+  370. >       expanded_pos_[i]=ExpPos[i]-offset;
+  371.         compressed_pos_[ExpPos[i]-offset] = i;
+  372.       }

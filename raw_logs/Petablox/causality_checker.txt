@@ -1,0 +1,249 @@
+============================== POTENTIAL BUGS ==============================
+BugReport(score=0.97, code=drake/common/symbolic_expression_cell.cc:292, key=(find, None), ctx=end
+BugReport(score=0.96, code=drake/common/test/functional_form_test.cc:851, key=(ref, None), ctx=cast
+BugReport(score=0.96, code=drake/common/test/functional_form_test.cc:852, key=(dyn, None), ctx=cast
+BugReport(score=0.95, code=drake/common/symbolic_formula.cc:316, key=(get_lhs_expression, None), ctx=get_rhs_expression
+BugReport(score=0.95, code=drake/solvers/mathematical_program.cc:312, key=(begin, None), ctx=end
+BugReport(score=0.95, code=/usr/lib/gcc/x86_64-redhat-linux/6.3.1/../../../../include/c++/6.3.1/bits/stl_vector.h:1511, key=(begin, None), ctx=end
+BugReport(score=0.95, code=drake/solvers/mathematical_program.cc:581, key=(begin, None), ctx=end
+BugReport(score=0.95, code=drake/solvers/moby_lcp_solver.cc:658, key=(begin, None), ctx=end
+BugReport(score=0.95, code=drake/common/functional_form.cc:529, key=(begin, None), ctx=end
+BugReport(score=0.95, code=drake/solvers/mathematical_program.cc:405, key=(begin, None), ctx=end
+BugReport(score=0.95, code=drake/solvers/mathematical_program.cc:1056, key=(begin, None), ctx=end
+BugReport(score=0.95, code=/usr/lib/gcc/x86_64-redhat-linux/6.3.1/../../../../include/c++/6.3.1/bits/stl_tree.h:1286, key=(begin, None), ctx=end
+BugReport(score=0.95, code=drake/solvers/mathematical_program.cc:393, key=(begin, None), ctx=end
+BugReport(score=0.95, code=drake/multibody/shapes/geometry.cc:280, key=(begin, None), ctx=end
+BugReport(score=0.95, code=drake/multibody/parsers/test/parsers_frames_test/parsers_frames_test.cc:52, key=(begin, None), ctx=end
+BugReport(score=0.94, code=drake/solvers/test/convex_optimization_test.cc:742, key=(z, None), ctx=size
+BugReport(score=0.93, code=drake/multibody/multibody_tree/test/rotational_inertia_tests.cc:183, key=(get_moments, None), ctx=get_products
+BugReport(score=0.93, code=drake/systems/estimators/kalman_filter.cc:43, key=(get_num_output_ports, ((-2147483648, 0), (2, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.93, code=drake/systems/estimators/kalman_filter.cc:43, key=(get_num_output_ports, ((-2147483648, 0), (2, 2147483647))), ctx=str
+BugReport(score=0.93, code=drake/systems/estimators/kalman_filter.cc:43, key=(get_num_output_ports, ((-2147483648, 0), (2, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.93, code=drake/systems/estimators/kalman_filter.cc:43, key=(get_num_output_ports, ((-2147483648, 0), (2, 2147483647))), ctx=Print
+BugReport(score=0.93, code=drake/systems/estimators/kalman_filter.cc:43, key=(get_num_output_ports, ((-2147483648, 0), (2, 2147483647))), ctx=PrintTo
+BugReport(score=0.92, code=drake/multibody/parsers/sdf_parser.cc:918, key=(Parse, None), ctx=FirstChildElement
+BugReport(score=0.92, code=drake/systems/estimators/kalman_filter.cc:43, key=(get_num_output_ports, ((1, 1),)), ctx=AssertionSuccess
+BugReport(score=0.92, code=drake/examples/bouncing_ball/test/ball_test.cc:43, key=(get_data_type, ((1, 4294967295),)), ctx=size
+BugReport(score=0.90, code=drake/multibody/rigid_body_plant/test/contact_resultant_force_test.cc:443, key=(ComputeResultant, None), ctx=CompareMatrices
+BugReport(score=0.89, code=drake/systems/framework/test/basic_vector_test.cc:125, key=(NormInf, None), ctx=derivatives
+BugReport(score=0.89, code=drake/systems/controllers/test/inverse_dynamics_test.cc:56, key=(get_num_input_ports, ((-2147483648, 1), (3, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.89, code=drake/systems/controllers/test/inverse_dynamics_test.cc:56, key=(get_num_input_ports, ((-2147483648, 1), (3, 2147483647))), ctx=str
+BugReport(score=0.89, code=drake/systems/controllers/test/inverse_dynamics_test.cc:56, key=(get_num_input_ports, ((-2147483648, 1), (3, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.89, code=drake/systems/controllers/test/inverse_dynamics_test.cc:56, key=(get_num_input_ports, ((-2147483648, 1), (3, 2147483647))), ctx=Print
+BugReport(score=0.89, code=drake/systems/controllers/test/inverse_dynamics_test.cc:56, key=(get_num_input_ports, ((-2147483648, 1), (3, 2147483647))), ctx=PrintTo
+BugReport(score=0.89, code=drake/solvers/test/moby_lcp_solver_test.cc:164, key=(z, None), ctx=tail
+BugReport(score=0.89, code=drake/solvers/test/convex_optimization_test.cc:742, key=(z, None), ctx=tail
+BugReport(score=0.89, code=drake/solvers/mathematical_program.cc:1048, key=(GetMonomials, None), ctx=failure_message
+BugReport(score=0.89, code=drake/solvers/mathematical_program.cc:1048, key=(GetMonomials, None), ctx=UniversalPrint
+BugReport(score=0.89, code=drake/solvers/mathematical_program.cc:1048, key=(GetMonomials, None), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.89, code=drake/solvers/mathematical_program.cc:1048, key=(GetMonomials, None), ctx=Print
+BugReport(score=0.89, code=drake/solvers/mathematical_program.cc:1048, key=(GetMonomials, None), ctx=PrintTo
+BugReport(score=0.89, code=drake/solvers/mathematical_program.cc:1048, key=(GetMonomials, None), ctx=str
+BugReport(score=0.89, code=drake/common/test/polynomial_test.cc:280, key=(count, ((1, 18446744073709551615),)), ctx=GetVariables
+BugReport(score=0.89, code=drake/common/test/polynomial_test.cc:280, key=(count, ((1, 18446744073709551615),)), ctx=Derivative
+BugReport(score=0.89, code=drake/systems/controllers/test/pid_controller_test.cc:78, key=(AssumeRole, ((1, 1),)), ctx=AlwaysTrue
+BugReport(score=0.89, code=drake/common/test/polynomial_test.cc:280, key=(count, ((0, 0),)), ctx=GetVariables
+BugReport(score=0.89, code=drake/common/test/polynomial_test.cc:280, key=(count, ((0, 0),)), ctx=Derivative
+BugReport(score=0.89, code=drake/multibody/rigid_body_plant/test/contact_resultant_force_test.cc:441, key=(AddForce, None), ctx=CompareMatrices
+BugReport(score=0.89, code=drake/multibody/rigid_body_plant/test/contact_resultant_force_test.cc:442, key=(AddForce, None), ctx=CompareMatrices
+BugReport(score=0.89, code=/usr/include/gtest/gtest-printers.h:326, key=(EvalVectorInput, ((1, 18446744073709551615),)), ctx=IsTrue
+BugReport(score=0.89, code=drake/systems/framework/test/leaf_context_test.cc:202, key=(EvalVectorInput, ((1, 18446744073709551615),)), ctx=get_value
+BugReport(score=0.88, code=drake/systems/primitives/test/linear_system_test.cc:124, key=(D, None), ctx=y0
+BugReport(score=0.88, code=drake/common/test/autodiff_overloads_test.cc:333, key=(rows, ((0, 0),)), ctx=cols
+BugReport(score=0.88, code=drake/common/test/autodiff_overloads_test.cc:333, key=(rows, ((0, 0),)), ctx=setSubMatrixGradient
+BugReport(score=0.88, code=drake/common/test/autodiff_overloads_test.cc:333, key=(rows, ((0, 0),)), ctx=eval
+BugReport(score=0.88, code=drake/../drake/math/autodiff.h:72, key=(auto_diff_matrix, None), ctx=initializeAutoDiffGivenGradientMatrix
+BugReport(score=0.88, code=drake/systems/plants/spring_mass_system/test/spring_mass_system_test.cc:150, key=(get_position, None), ctx=get_velocity
+BugReport(score=0.87, code=drake/systems/primitives/test/gain_test.cc:29, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.87, code=drake/multibody/parsers/package_map.cc:218, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.87, code=/usr/lib/gcc/x86_64-redhat-linux/6.3.1/../../../../include/c++/6.3.1/bits/basic_string.h:5330, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.87, code=drake/systems/primitives/test/gain_test.cc:29, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=PrintTo
+BugReport(score=0.87, code=drake/multibody/parsers/package_map.cc:218, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=PrintTo
+BugReport(score=0.87, code=/usr/lib/gcc/x86_64-redhat-linux/6.3.1/../../../../include/c++/6.3.1/bits/basic_string.h:5330, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=PrintTo
+BugReport(score=0.87, code=drake/systems/primitives/test/gain_test.cc:29, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=str
+BugReport(score=0.87, code=drake/multibody/parsers/package_map.cc:218, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=str
+BugReport(score=0.87, code=/usr/lib/gcc/x86_64-redhat-linux/6.3.1/../../../../include/c++/6.3.1/bits/basic_string.h:5330, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=str
+BugReport(score=0.87, code=drake/systems/primitives/test/gain_test.cc:29, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.87, code=drake/multibody/parsers/package_map.cc:218, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.87, code=/usr/lib/gcc/x86_64-redhat-linux/6.3.1/../../../../include/c++/6.3.1/bits/basic_string.h:5330, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.87, code=drake/systems/primitives/test/gain_test.cc:29, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=Print
+BugReport(score=0.87, code=drake/multibody/parsers/package_map.cc:218, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=Print
+BugReport(score=0.87, code=/usr/lib/gcc/x86_64-redhat-linux/6.3.1/../../../../include/c++/6.3.1/bits/basic_string.h:5330, key=(size, ((-2147483648, -1), (1, 2147483647))), ctx=Print
+BugReport(score=0.86, code=drake/multibody/shapes/test/face_query_test.cc:21, key=(colwise, None), ctx=cross
+BugReport(score=0.86, code=drake/systems/controllers/controlUtil.cpp:212, key=(colwise, None), ctx=cross
+BugReport(score=0.86, code=/usr/lib/gcc/x86_64-redhat-linux/6.3.1/../../../../include/c++/6.3.1/bits/stl_algo.h:1844, key=(__comp, None), ctx=move
+BugReport(score=0.86, code=drake/common/symbolic_formula_cell.cc:450, key=(isnan, None), ctx=Evaluate
+BugReport(score=0.86, code=drake/solvers/moby_lcp_solver.cc:168, key=(constraint, None), ctx=rows
+BugReport(score=0.86, code=drake/solvers/moby_lcp_solver.cc:168, key=(constraint, None), ctx=base
+BugReport(score=0.86, code=drake/solvers/moby_lcp_solver.cc:168, key=(constraint, None), ctx=SetSolverResult
+BugReport(score=0.86, code=drake/solvers/moby_lcp_solver.cc:168, key=(constraint, None), ctx=solver_type
+BugReport(score=0.86, code=drake/solvers/moby_lcp_solver.cc:168, key=(constraint, None), ctx=solve
+BugReport(score=0.85, code=drake/multibody/global_inverse_kinematics.cc:278, key=(q, None), ctx=row
+BugReport(score=0.85, code=drake/solvers/moby_lcp_solver.cc:170, key=(q, None), ctx=row
+BugReport(score=0.85, code=drake/../drake/math/quaternion.h:458, key=(q, None), ctx=row
+BugReport(score=0.85, code=drake/../drake/math/expmap.h:83, key=(q, None), ctx=row
+BugReport(score=0.85, code=drake/multibody/global_inverse_kinematics.cc:278, key=(q, None), ctx=linear
+BugReport(score=0.85, code=drake/solvers/moby_lcp_solver.cc:170, key=(q, None), ctx=linear
+BugReport(score=0.85, code=drake/../drake/math/quaternion.h:458, key=(q, None), ctx=linear
+BugReport(score=0.85, code=drake/../drake/math/expmap.h:83, key=(q, None), ctx=linear
+BugReport(score=0.85, code=drake/../drake/common/eigen_matrix_compare.h:94, key=(m1, None), ctx=AssertionFailure
+BugReport(score=0.85, code=drake/../drake/common/eigen_matrix_compare.h:88, key=(m1, None), ctx=AssertionFailure
+BugReport(score=0.85, code=drake/common/test/symbolic_expression_matrix_test.cc:254, key=(m1, None), ctx=AssertionFailure
+BugReport(score=0.85, code=drake/common/test/symbolic_variable_overloading_test.cc:304, key=(m1, None), ctx=AssertionFailure
+BugReport(score=0.85, code=drake/common/test/symbolic_expression_matrix_test.cc:156, key=(m1, None), ctx=AssertionFailure
+BugReport(score=0.85, code=drake/../drake/common/eigen_matrix_compare.h:78, key=(m1, None), ctx=AssertionFailure
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/rotational_inertia_tests.cc:175, key=(CopyToFullMatrix3, None), ctx=isNaN
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/rotational_inertia_tests.cc:100, key=(CopyToFullMatrix3, None), ctx=all
+BugReport(score=0.83, code=drake/solvers/rotation_constraint.cc:436, key=(EnvelopeMinValue, None), ctx=box_min
+BugReport(score=0.83, code=drake/systems/framework/test/leaf_system_test.cc:493, key=(AddPeriodicUpdate, None), ctx=size
+BugReport(score=0.83, code=drake/common/test/functional_form_test.cc:806, key=(dyn, None), ctx=ref
+BugReport(score=0.83, code=drake/common/test/functional_form_test.cc:846, key=(dyn, None), ctx=ref
+BugReport(score=0.83, code=drake/common/test/functional_form_test.cc:784, key=(dyn, None), ctx=ref
+BugReport(score=0.83, code=drake/common/test/functional_form_test.cc:852, key=(dyn, None), ctx=ref
+BugReport(score=0.83, code=drake/../drake/math/matrix_util.h:23, key=(cols, ((-9223372036854775808, 1),)), ctx=rows
+BugReport(score=0.83, code=drake/common/test/symbolic_expression_matrix_test.cc:156, key=(EqualTo, ((1, 255),)), ctx=to_string
+BugReport(score=0.83, code=drake/common/test/symbolic_expression_matrix_test.cc:156, key=(EqualTo, ((1, 255),)), ctx=compare
+BugReport(score=0.83, code=drake/common/test/symbolic_expression_matrix_test.cc:156, key=(EqualTo, ((1, 255),)), ctx=AssertionFailure
+BugReport(score=0.83, code=drake/systems/framework/test/parameters_test.cc:78, key=(get_value, ((-2147483648, 143), (145, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.83, code=drake/systems/framework/test/parameters_test.cc:78, key=(get_value, ((-2147483648, 143), (145, 2147483647))), ctx=Print
+BugReport(score=0.83, code=drake/systems/framework/test/parameters_test.cc:78, key=(get_value, ((-2147483648, 143), (145, 2147483647))), ctx=str
+BugReport(score=0.83, code=drake/systems/framework/test/parameters_test.cc:78, key=(get_value, ((-2147483648, 143), (145, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.83, code=drake/systems/framework/test/parameters_test.cc:78, key=(get_value, ((-2147483648, 143), (145, 2147483647))), ctx=PrintTo
+BugReport(score=0.83, code=drake/common/test/symbolic_expression_matrix_test.cc:156, key=(EqualTo, ((0, 0),)), ctx=AssertionSuccess
+BugReport(score=0.83, code=drake/systems/trajectory_optimization/test/direct_collocation_constraint_test.cc:65, key=(size, ((-9223372036854775808, -2), (0, 9223372036854775807))), ctx=initializeAutoDiff
+BugReport(score=0.83, code=drake/systems/trajectory_optimization/test/direct_collocation_constraint_test.cc:67, key=(size, ((-9223372036854775808, -2), (0, 9223372036854775807))), ctx=initializeAutoDiff
+BugReport(score=0.83, code=drake/systems/primitives/test/linear_system_test.cc:43, key=(f0, None), ctx=rows
+BugReport(score=0.83, code=drake/solvers/test/moby_lcp_solver_test.cc:164, key=(z, None), ctx=squaredNorm
+BugReport(score=0.83, code=drake/solvers/test/constraint_test.cc:60, key=(z, None), ctx=squaredNorm
+BugReport(score=0.83, code=drake/solvers/test/convex_optimization_test.cc:742, key=(z, None), ctx=squaredNorm
+BugReport(score=0.83, code=drake/common/trajectories/piecewise_polynomial_base.cc:32, key=(getNumberOfCoefficients, None), ctx=getSegmentTimes
+BugReport(score=0.83, code=drake/../drake/math/matrix_util.h:23, key=(cols, ((2, 9223372036854775807),)), ctx=rows
+BugReport(score=0.83, code=drake/systems/framework/model_values.cc:24, key=(get, ((0, 0),)), ctx=UniversalPrint
+BugReport(score=0.83, code=drake/../drake/systems/framework/system.h:841, key=(get, ((0, 0),)), ctx=UniversalPrint
+BugReport(score=0.83, code=drake/systems/framework/model_values.cc:24, key=(get, ((0, 0),)), ctx=str
+BugReport(score=0.83, code=drake/../drake/systems/framework/system.h:841, key=(get, ((0, 0),)), ctx=str
+BugReport(score=0.83, code=drake/systems/framework/model_values.cc:24, key=(get, ((0, 0),)), ctx=Print
+BugReport(score=0.83, code=drake/../drake/systems/framework/system.h:841, key=(get, ((0, 0),)), ctx=Print
+BugReport(score=0.83, code=drake/systems/framework/model_values.cc:24, key=(get, ((0, 0),)), ctx=PrintTo
+BugReport(score=0.83, code=drake/../drake/systems/framework/system.h:841, key=(get, ((0, 0),)), ctx=PrintTo
+BugReport(score=0.83, code=drake/multibody/parsers/test/package_map_test/package_map_test.cc:99, key=(PopulateUpstreamToDrake, None), ctx=data
+BugReport(score=0.83, code=drake/multibody/parsers/test/package_map_test/package_map_test.cc:99, key=(PopulateUpstreamToDrake, None), ctx=LoadFile
+BugReport(score=0.83, code=drake/multibody/parsers/test/package_map_test/package_map_test.cc:99, key=(PopulateUpstreamToDrake, None), ctx=find_last_of
+BugReport(score=0.83, code=drake/multibody/parsers/test/package_map_test/package_map_test.cc:99, key=(PopulateUpstreamToDrake, None), ctx=ErrorID
+BugReport(score=0.83, code=drake/examples/bead_on_a_wire/test/bead_on_a_wire_test.cc:97, key=(helix_function, None), ctx=DoubleNearPredFormat
+BugReport(score=0.83, code=drake/systems/analysis/test/simulator_test.cc:168, key=(reset_integrator, None), ctx=Initialize
+BugReport(score=0.83, code=drake/systems/framework/test/parameters_test.cc:78, key=(get_value, ((144, 144),)), ctx=AssertionSuccess
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=cols
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=bottomRows
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=eval
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=topRows
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=linear
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=translation
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=colwise
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=cross
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=noalias
+BugReport(score=0.83, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:106, key=(isZero, None), ctx=transpose
+BugReport(score=0.83, code=drake/../drake/math/gradient_util.h:158, key=(noalias, None), ctx=linear
+BugReport(score=0.83, code=drake/solvers/test/moby_lcp_solver_test.cc:25, key=(M, None), ctx=q
+BugReport(score=0.83, code=drake/solvers/test/moby_lcp_solver_test.cc:155, key=(M, None), ctx=q
+BugReport(score=0.83, code=drake/solvers/test/moby_lcp_solver_test.cc:24, key=(M, None), ctx=q
+BugReport(score=0.83, code=drake/solvers/test/moby_lcp_solver_test.cc:144, key=(M, None), ctx=q
+BugReport(score=0.83, code=drake/solvers/test/moby_lcp_solver_test.cc:25, key=(M, None), ctx=size
+BugReport(score=0.83, code=drake/solvers/moby_lcp_solver.cc:170, key=(M, None), ctx=size
+BugReport(score=0.83, code=drake/solvers/test/moby_lcp_solver_test.cc:24, key=(M, None), ctx=size
+BugReport(score=0.83, code=drake/solvers/test/moby_lcp_solver_test.cc:144, key=(M, None), ctx=size
+BugReport(score=0.82, code=drake/solvers/test/convex_optimization_test.cc:671, key=(s, None), ctx=c
+BugReport(score=0.82, code=drake/solvers/test/convex_optimization_test.cc:670, key=(s, None), ctx=c
+BugReport(score=0.82, code=drake/solvers/test/linear_program_examples.cc:189, key=(x_, None), ctx=this->x_
+BugReport(score=0.82, code=drake/solvers/test/optimization_examples.cc:439, key=(x_, None), ctx=this->x_
+BugReport(score=0.82, code=drake/solvers/test/optimization_examples.cc:351, key=(x_, None), ctx=prog
+BugReport(score=0.82, code=drake/solvers/test/optimization_examples.cc:439, key=(x_, None), ctx=prog
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_system_test.cc:494, key=(CalcNextUpdateTime, None), ctx=size
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_system_test.cc:237, key=(CalcNextUpdateTime, None), ctx=size
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_system_test.cc:225, key=(CalcNextUpdateTime, None), ctx=size
+BugReport(score=0.81, code=drake/multibody/global_inverse_kinematics.cc:278, key=(q, None), ctx=size
+BugReport(score=0.81, code=drake/util/test/testDrakeGeometryUtil.cpp:35, key=(q, None), ctx=size
+BugReport(score=0.81, code=drake/solvers/moby_lcp_solver.cc:170, key=(q, None), ctx=size
+BugReport(score=0.81, code=drake/../drake/math/quaternion.h:458, key=(q, None), ctx=size
+BugReport(score=0.81, code=drake/util/test/testDrakeGeometryUtil.cpp:66, key=(q, None), ctx=size
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:148, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:348, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.81, code=drake/systems/primitives/test/multiplexer_test.cc:50, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:144, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.81, code=drake/systems/primitives/test/demultiplexer_test.cc:103, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:148, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=str
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:348, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=str
+BugReport(score=0.81, code=drake/systems/primitives/test/multiplexer_test.cc:50, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=str
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:144, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=str
+BugReport(score=0.81, code=drake/systems/primitives/test/demultiplexer_test.cc:103, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=str
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:148, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:348, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.81, code=drake/systems/primitives/test/multiplexer_test.cc:50, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:144, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.81, code=drake/systems/primitives/test/demultiplexer_test.cc:103, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:148, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=Print
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:348, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=Print
+BugReport(score=0.81, code=drake/systems/primitives/test/multiplexer_test.cc:50, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=Print
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:144, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=Print
+BugReport(score=0.81, code=drake/systems/primitives/test/demultiplexer_test.cc:103, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=Print
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:148, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=PrintTo
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:348, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=PrintTo
+BugReport(score=0.81, code=drake/systems/primitives/test/multiplexer_test.cc:50, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=PrintTo
+BugReport(score=0.81, code=drake/systems/framework/test/leaf_context_test.cc:144, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=PrintTo
+BugReport(score=0.81, code=drake/systems/primitives/test/demultiplexer_test.cc:103, key=(size, ((-2147483648, 1), (3, 2147483647))), ctx=PrintTo
+BugReport(score=0.80, code=drake/systems/framework/test/cache_test.cc:103, key=(get_value, ((-2147483648, 0), (2, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.80, code=drake/systems/framework/test/cache_test.cc:103, key=(get_value, ((-2147483648, 0), (2, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.80, code=drake/systems/framework/test/cache_test.cc:103, key=(get_value, ((-2147483648, 0), (2, 2147483647))), ctx=Print
+BugReport(score=0.80, code=drake/systems/framework/test/cache_test.cc:103, key=(get_value, ((-2147483648, 0), (2, 2147483647))), ctx=str
+BugReport(score=0.80, code=drake/systems/framework/test/cache_test.cc:103, key=(get_value, ((-2147483648, 0), (2, 2147483647))), ctx=PrintTo
+BugReport(score=0.80, code=drake/systems/primitives/test/saturation_test.cc:72, key=(get_num_input_ports, ((-2147483648, 2), (4, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.80, code=drake/systems/primitives/test/saturation_test.cc:72, key=(get_num_input_ports, ((-2147483648, 2), (4, 2147483647))), ctx=Print
+BugReport(score=0.80, code=drake/systems/primitives/test/saturation_test.cc:72, key=(get_num_input_ports, ((-2147483648, 2), (4, 2147483647))), ctx=str
+BugReport(score=0.80, code=drake/systems/primitives/test/saturation_test.cc:72, key=(get_num_input_ports, ((-2147483648, 2), (4, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.80, code=drake/systems/primitives/test/saturation_test.cc:72, key=(get_num_input_ports, ((-2147483648, 2), (4, 2147483647))), ctx=PrintTo
+BugReport(score=0.80, code=drake/thirdParty/zlib/tinyxml2/tinyxml2.cpp:2392, key=(SealElementIfJustOpened, None), ctx=Print
+BugReport(score=0.80, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:73, key=(m, None), ctx=p
+BugReport(score=0.80, code=drake/multibody/multibody_tree/test/rotational_inertia_tests.cc:37, key=(m, None), ctx=p
+BugReport(score=0.80, code=drake/multibody/multibody_tree/test/unit_inertia_tests.cc:41, key=(m, None), ctx=p
+BugReport(score=0.80, code=drake/systems/framework/test/diagram_test.cc:525, key=(DeclareInputPort, None), ctx=DeclareOutputPort
+BugReport(score=0.80, code=drake/systems/framework/test/diagram_builder_test.cc:83, key=(DeclareInputPort, None), ctx=DeclareOutputPort
+BugReport(score=0.80, code=drake/systems/framework/test/diagram_test.cc:640, key=(DeclareInputPort, None), ctx=DeclareOutputPort
+BugReport(score=0.80, code=drake/systems/controllers/controlUtil.cpp:476, key=(quat_dot_autodiff, None), ctx=__builtin_nan
+BugReport(score=0.80, code=drake/systems/controllers/controlUtil.cpp:476, key=(quat_dot_autodiff, None), ctx=quiet_NaN
+BugReport(score=0.80, code=drake/systems/controllers/controlUtil.cpp:476, key=(quat_dot_autodiff, None), ctx=resize
+BugReport(score=0.80, code=drake/math/test/gradient_util_test.cc:51, key=(setSubMatrixGradient, None), ctx=cols
+BugReport(score=0.80, code=drake/math/test/gradient_util_test.cc:51, key=(setSubMatrixGradient, None), ctx=eval
+BugReport(score=0.80, code=drake/common/trajectories/test/piecewise_quaternion_test.cc:62, key=(angular_velocity, None), ctx=get_num_ports
+BugReport(score=0.80, code=drake/common/trajectories/test/piecewise_quaternion_test.cc:62, key=(angular_velocity, None), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.80, code=drake/common/trajectories/test/piecewise_quaternion_test.cc:62, key=(angular_velocity, None), ctx=Print
+BugReport(score=0.80, code=drake/common/trajectories/test/piecewise_quaternion_test.cc:62, key=(angular_velocity, None), ctx=get_input_port
+BugReport(score=0.80, code=drake/common/trajectories/test/piecewise_quaternion_test.cc:62, key=(angular_velocity, None), ctx=str
+BugReport(score=0.80, code=drake/common/trajectories/test/piecewise_quaternion_test.cc:62, key=(angular_velocity, None), ctx=forward
+BugReport(score=0.80, code=drake/common/trajectories/test/piecewise_quaternion_test.cc:62, key=(angular_velocity, None), ctx=PrintTo
+BugReport(score=0.80, code=drake/common/trajectories/test/piecewise_quaternion_test.cc:62, key=(angular_velocity, None), ctx=get_index
+BugReport(score=0.80, code=drake/common/trajectories/test/piecewise_quaternion_test.cc:62, key=(angular_velocity, None), ctx=UniversalPrint
+BugReport(score=0.80, code=drake/multibody/parsers/urdf_parser.cc:723, key=(set_parent, None), ctx=move
+BugReport(score=0.80, code=drake/multibody/parsers/sdf_parser.cc:658, key=(set_parent, None), ctx=move
+BugReport(score=0.80, code=drake/systems/framework/test/parameters_test.cc:78, key=(UnpackIntValue, ((-2147483648, 71), (73, 2147483647))), ctx=get_abstract_parameter
+BugReport(score=0.80, code=drake/systems/framework/test/parameters_test.cc:78, key=(UnpackIntValue, ((-2147483648, 71), (73, 2147483647))), ctx=UniversalPrint
+BugReport(score=0.80, code=drake/systems/framework/test/parameters_test.cc:78, key=(UnpackIntValue, ((-2147483648, 71), (73, 2147483647))), ctx=Print
+BugReport(score=0.80, code=drake/systems/framework/test/parameters_test.cc:78, key=(UnpackIntValue, ((-2147483648, 71), (73, 2147483647))), ctx=str
+BugReport(score=0.80, code=drake/systems/framework/test/parameters_test.cc:78, key=(UnpackIntValue, ((-2147483648, 71), (73, 2147483647))), ctx=DefaultPrintNonContainerTo
+BugReport(score=0.80, code=drake/systems/framework/test/parameters_test.cc:78, key=(UnpackIntValue, ((-2147483648, 71), (73, 2147483647))), ctx=PrintTo
+BugReport(score=0.80, code=drake/common/monomial.cc:457, key=(is_constant, ((1, 255),)), ctx=get_constant_value
+BugReport(score=0.80, code=drake/systems/framework/test/parameters_test.cc:78, key=(UnpackIntValue, ((72, 72),)), ctx=AssertionSuccess
+BugReport(score=0.80, code=drake/systems/framework/test/parameters_test.cc:78, key=(UnpackIntValue, ((72, 72),)), ctx=get_abstract_parameter
+BugReport(score=0.80, code=drake/multibody/inverse_kinematics_trajectory_backend.cc:144, key=(t_samples, None), ctx=resize
+BugReport(score=0.80, code=drake/solvers/mathematical_program.cc:457, key=(DecomposeLinearExpression, None), ctx=rows
+BugReport(score=0.80, code=drake/systems/controllers/test/inverse_dynamics_test.cc:56, key=(get_num_input_ports, ((2, 2),)), ctx=AssertionSuccess
+BugReport(score=0.80, code=drake/systems/framework/test/cache_test.cc:103, key=(get_value, ((1, 1),)), ctx=AssertionSuccess
+BugReport(score=0.80, code=drake/solvers/test/optimization_examples.cc:318, key=(AddSymbolicConstraint, None), ctx=cols
+BugReport(score=0.80, code=drake/solvers/test/optimization_examples.cc:318, key=(AddSymbolicConstraint, None), ctx=derived
+BugReport(score=0.80, code=drake/solvers/test/optimization_examples.cc:318, key=(AddSymbolicConstraint, None), ctx=rows
+BugReport(score=0.80, code=drake/systems/framework/test/diagram_test.cc:109, key=(GetMutableSubsystemState, None), ctx=SetAtIndex
+BugReport(score=0.80, code=drake/systems/framework/test/diagram_test.cc:109, key=(GetMutableSubsystemState, None), ctx=get_mutable_vector
+BugReport(score=0.80, code=drake/solvers/mathematical_program.cc:961, key=(rows, ((3, 9223372036854775807),)), ctx=DecomposeLinearExpression
+BugReport(score=0.80, code=drake/solvers/mathematical_program.cc:961, key=(rows, ((3, 9223372036854775807),)), ctx=size
+BugReport(score=0.80, code=drake/common/test/symbolic_expression_matrix_test.cc:146, key=(CheckStructuralEquality, None), ctx=rows
+BugReport(score=0.80, code=drake/systems/controllers/controlUtil.cpp:459, key=(expmap_autodiff, None), ctx=expmap_ddot
+BugReport(score=0.80, code=drake/systems/controllers/controlUtil.cpp:459, key=(expmap_autodiff, None), ctx=resize
