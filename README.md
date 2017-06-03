@@ -26,7 +26,7 @@ All of the above tools except Coverity are freely available.  Coverity provides 
   </tr>
 
   <tr> 
-    <td> [ND in externals/ipopt](analysis_results/FB_Infer.md#alarm-1-drakeexternalsipoptipoptsrclinalgipexpansionmatrixcpp371) </td> 
+    <td> <a href="analysis_results/FB_Infer.md#alarm-1-drakeexternalsipoptipoptsrclinalgipexpansionmatrixcpp371">ND in externals/ipopt</a> </td> 
     <td> A pointer is allocated memory depending on a condition. But the condition may not hold when the pointer is accessed. </td> 
 
   <tr>
