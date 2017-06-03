@@ -23,12 +23,14 @@ All of the above tools except Coverity are freely available.  Coverity provides 
     <td> Petablox </td> 
     <td> FBInfer </td> 
     <td> Kint </td> 
+    <td> Coverity </td>
   </tr>
 
   <tr> 
     <td>  drake/automotive </td> 
     <td>  0 </td> 
     <td>  22 </td> 
+    <td>  </td> 
     <td>  </td> 
   </tr>
 
@@ -40,12 +42,14 @@ All of the above tools except Coverity are freely available.  Coverity provides 
     <td> 559 </td> 
     <td> 1 </td> 
     <td>  </td> 
+    <td>  </td> 
   </tr>
 
   <tr> 
     <td> drake/systems </td> 
     <td> 1203 </td> 
     <td> 13 </td> 
+    <td>  </td>
     <td>  </td> 
   </tr>
 
@@ -54,12 +58,14 @@ All of the above tools except Coverity are freely available.  Coverity provides 
     <td> 1008 </td> 
     <td> 2 </td> 
     <td>  </td> 
+    <td>  </td> 
   </tr>
 
   <tr> 
     <td> externals/libbot </td> 
     <td> 38 </td> 
     <td> 108 </td> 
+    <td>  </td> 
     <td>  </td> 
   </tr>
 
@@ -68,12 +74,14 @@ All of the above tools except Coverity are freely available.  Coverity provides 
     <td> 13 </td> 
     <td> 70 </td> 
     <td>  </td> 
+    <td>  </td> 
   </tr>
 
   <tr> 
     <td> others </td> 
     <td>  </td> 
     <td>  </td> 
+    <td>  </td>
     <td>  </td> 
   </tr>
 
