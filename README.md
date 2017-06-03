@@ -18,7 +18,28 @@ All of the above tools except Coverity are freely available.  Coverity provides 
 <ul>
 <li>Petablox and FB Infer were able to run successfully on XXX thousand lines of source code in the Drake codebase.  This attests to the suitability of these tools for analyzing large and complex autonomous software systems.</li>
 
-<li>Highlight real bugs found</li>
+<li>FB Infer found 138 potential null dereference bugs and Petablox found 2 buffer underruns and 9 null dereferences. Among them, we describe three representative alarms as follows. 
+<table>
+  <tr> 
+    <td> Link to details </td> 
+    <td> High-level description </td> 
+  </tr>
+
+  <tr> 
+    <td> [ND in externals/ipopt](analysis_results/FB_Infer.md#alarm-1-drakeexternalsipoptipoptsrclinalgipexpansionmatrixcpp371) </td> 
+    <td> A pointer is allocated memory depending on a condition. But the condition may not hold when the pointer is accessed. </td> 
+
+  <tr>
+  <td></td>
+  <td></td>
+  </tr>
+  
+  <tr>
+  <td></td>
+  <td></td>
+  </tr>
+</table>
+</li>
 
 <li>Future work in suppressing false alarms by synthesizing rules</li>
 </ul>
