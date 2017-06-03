@@ -47,7 +47,7 @@ The return value checker semantically analyzes return value checks across differ
 
   <tr>
   	<td>
-  		drake/multibody/parsers/urdf_parser.cc:1295
+      <a href="https://github.com/RobotLocomotion/drake/blob/master/drake/multibody/parsers/urdf_parser.cc#L1320"> drake/multibody/parsers/urdf_parser.cc:1320 </a>
   	</td>
   	<td>
   		Should do the null check after return; this would be a bug if the string constructor cannot initialize with null pointer properly.
