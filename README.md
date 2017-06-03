@@ -95,3 +95,13 @@ Our analysis of potential safety/security issues discovered in Drake by the tool
 ### Detailed Output
 
 The raw output of running the tools on Drake is available in folders under directory [raw_logs](raw_logs).
+
+### Key Findings
+
+<ul>
+<li>Petablox and FB Infer were able to run successfully on XXX thousand lines of source code in the Drake codebase.  This attests to the suitability of these tools for analyzing large and complex autonomous software systems.</li>
+
+<li>Bugs found</li>
+
+<li>Future work in suppressing false alarms</li>
+</ul>
