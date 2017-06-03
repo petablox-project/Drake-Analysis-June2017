@@ -19,7 +19,7 @@ After manual inspection, 138 out of 420 null dereference alarms turned out to be
 
 For brevity, we describe 5 representative alarms as follows.
 
-#### Alarm 1: `[drake/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.cpp:371](../drake/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.html#L371)`
+#### Alarm 1: [drake/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.cpp:371](../drake/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.html#L371)
 
 The pointer `compressed_pos_` is allocated memory only if `NRows() > 0` (at line 361 and 362). If `NCols() > 0` and `NRows() <= 0`, then it could be null and is dereferenced at line 371.
 
