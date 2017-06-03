@@ -13,7 +13,15 @@ We ran various checkers in four different automated static analysis tools on the
 
 All of the above tools except Coverity are freely available.  Coverity provides a free service for github hosted projects (such as Drake); its results of analyzing Drake will be available in 48 hours.
 
+### Key Findings
 
+<ul>
+<li>Petablox and FB Infer were able to run successfully on XXX thousand lines of source code in the Drake codebase.  This attests to the suitability of these tools for analyzing large and complex autonomous software systems.</li>
+
+<li>Highlight real bugs found</li>
+
+<li>Future work in suppressing false alarms by synthesizing rules</li>
+</ul>
 
 ### Checker Analytics
 
@@ -23,12 +31,14 @@ All of the above tools except Coverity are freely available.  Coverity provides 
     <td> Petablox </td> 
     <td> FBInfer </td> 
     <td> Kint </td> 
+    <td> Coverity </td>
   </tr>
 
   <tr> 
     <td>  drake/automotive </td> 
     <td>  0 </td> 
     <td>  22 </td> 
+    <td>  </td> 
     <td>  </td> 
   </tr>
 
@@ -40,12 +50,14 @@ All of the above tools except Coverity are freely available.  Coverity provides 
     <td> 559 </td> 
     <td> 1 </td> 
     <td>  </td> 
+    <td>  </td> 
   </tr>
 
   <tr> 
     <td> drake/systems </td> 
     <td> 1203 </td> 
     <td> 13 </td> 
+    <td>  </td>
     <td>  </td> 
   </tr>
 
@@ -54,12 +66,14 @@ All of the above tools except Coverity are freely available.  Coverity provides 
     <td> 1008 </td> 
     <td> 2 </td> 
     <td>  </td> 
+    <td>  </td> 
   </tr>
 
   <tr> 
     <td> externals/libbot </td> 
     <td> 38 </td> 
     <td> 108 </td> 
+    <td>  </td> 
     <td>  </td> 
   </tr>
 
@@ -68,12 +82,14 @@ All of the above tools except Coverity are freely available.  Coverity provides 
     <td> 13 </td> 
     <td> 70 </td> 
     <td>  </td> 
+    <td>  </td> 
   </tr>
 
   <tr> 
     <td> others </td> 
     <td>  </td> 
     <td>  </td> 
+    <td>  </td>
     <td>  </td> 
   </tr>
 
@@ -87,3 +103,4 @@ Our analysis of potential safety/security issues discovered in Drake by the tool
 ### Detailed Output
 
 The raw output of running the tools on Drake is available in folders under directory [raw_logs](raw_logs).
+
