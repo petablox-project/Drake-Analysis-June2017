@@ -19,7 +19,7 @@ After manual inspection, 138 out of 420 null dereference alarms turned out to be
 
 For brevity, we describe 5 representative alarms as follows.
 
-#### Alarm 1: `drake/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.cpp:371`
+#### Alarm 1: `[drake/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.cpp:371](../drake/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.html#L371)`
 
 The pointer `compressed_pos_` is allocated memory only if `NRows() > 0` (at line 361 and 362). If `NCols() > 0` and `NRows() <= 0`, then it could be null and is dereferenced at line 371.
 
@@ -41,7 +41,7 @@ ExpansionMatrixSpace(...) : expanded_pos_(NULL), compressed_pos_(NULL)  {
 }
 ```
 
-#### Alarm 2: `drake/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:306`
+#### Alarm 2: `[drake/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp:306](../drake/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.html#L306)`
 
 The `ESIofSymbols` last assigned on line 284: 
 
@@ -51,7 +51,7 @@ The `ESIofSymbols` last assigned on line 284:
 
 could be null and is dereferenced at line 306, column 5 `(*ESIofSymbols)`.
 
-#### Alarm 3: `drake/externals/lcm/lcmgen/getopt.c:51`
+#### Alarm 3: `[drake/externals/lcm/lcmgen/getopt.c:51](../drake/externals/lcm/lcmgen/getopt.html#L51)`
 
 The `arg` last assigned on line 50 could be null and is dereferenced by call to `strstr()` at line 51. 
 
@@ -60,7 +60,7 @@ The `arg` last assigned on line 50 could be null and is dereferenced by call to 
 51: char *eq = strstr(arg, "=");
 ```
 
-#### Alarm 4: `drake/externals/libbot/bot2-procman/src/deputy/procman.c:101`
+#### Alarm 4: `[drake/externals/libbot/bot2-procman/src/deputy/procman.c:101](../drake/externals/libbot/bot2-procman/src/deputy/procman.html#L101)`
 
 The `path` last assigned on line 100 could be null and is dereferenced by call to `strlen()` at line 101:
 
@@ -69,7 +69,7 @@ The `path` last assigned on line 100 could be null and is dereferenced by call t
 101: int newpathlen = strlen (path) + strlen(params->bin_path) + 2;
 ```
 
-#### Alarm 5: `drake/externals/ipopt/Ipopt/src/Algorithm/LinearSolvers/IpPardisoSolverInterface.cpp:639`
+#### Alarm 5: `[drake/externals/ipopt/Ipopt/src/Algorithm/LinearSolvers/IpPardisoSolverInterface.cpp:639](../drake/externals/ipopt/Ipopt/src/Algorithm/LinearSolvers/IpPardisoSolverInterface.html#L639)`
 
 The pointer `mat_file` last assigned on line 637 could be null and is dereferenced by call to `fprintf()` at line 639:
 
