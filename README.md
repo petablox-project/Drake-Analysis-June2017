@@ -13,7 +13,15 @@ We ran various checkers in four different automated static analysis tools on the
 
 All of the above tools except Coverity are freely available.  Coverity provides a free service for github hosted projects (such as Drake); its results of analyzing Drake will be available in 48 hours.
 
+### Key Findings
 
+<ul>
+<li>Petablox and FB Infer were able to run successfully on XXX thousand lines of source code in the Drake codebase.  This attests to the suitability of these tools for analyzing large and complex autonomous software systems.</li>
+
+<li>Highlight real bugs found</li>
+
+<li>Future work in suppressing false alarms by synthesizing rules</li>
+</ul>
 
 ### Checker Analytics
 
@@ -96,12 +104,3 @@ Our analysis of potential safety/security issues discovered in Drake by the tool
 
 The raw output of running the tools on Drake is available in folders under directory [raw_logs](raw_logs).
 
-### Key Findings
-
-<ul>
-<li>Petablox and FB Infer were able to run successfully on XXX thousand lines of source code in the Drake codebase.  This attests to the suitability of these tools for analyzing large and complex autonomous software systems.</li>
-
-<li>Bugs found</li>
-
-<li>Future work in suppressing false alarms</li>
-</ul>
