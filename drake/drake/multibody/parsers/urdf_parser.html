@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/drake/multibody/parsers/urdf_parser.cc</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl ppc">#include</span> <span class="hl pps">&quot;drake/multibody/parsers/urdf_parser.h&quot;</span><span class="hl ppc"></span>
+
+<span class="hl ppc">#include &lt;algorithm&gt;</span>
+<span class="hl ppc">#include &lt;fstream&gt;</span>
+<span class="hl ppc">#include &lt;limits&gt;</span>
+<span class="hl ppc">#include &lt;sstream&gt;</span>
+<span class="hl ppc">#include &lt;string&gt;</span>
+<span class="hl ppc">#include &lt;utility&gt;</span>
+<span class="hl ppc">#include &lt;vector&gt;</span>
+
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;drake/common/drake_assert.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;drake/common/eigen_types.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;drake/multibody/joints/drake_joints.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;drake/multibody/joints/floating_base_types.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;drake/multibody/material_map.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;drake/multibody/parsers/model_instance_id_table.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;drake/multibody/parsers/xml_util.h&quot;</span><span class="hl ppc"></span>
+
+<span class="hl kwa">namespace</span> drake <span class="hl opt">{</span>
+<span class="hl kwa">namespace</span> parsers <span class="hl opt">{</span>
+<span class="hl kwa">namespace</span> urdf <span class="hl opt">{</span>
+
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>allocate_shared<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>cerr<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>endl<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>max<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>numeric_limits<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>runtime_error<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>ostream<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>string<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>stringstream<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>unique_ptr<span class="hl opt">;</span>
+<span class="hl kwa">using</span> std<span class="hl opt">::</span>vector<span class="hl opt">;</span>
+
+<span class="hl kwa">using</span> Eigen<span class="hl opt">::</span>Isometry3d<span class="hl opt">;</span>
+<span class="hl kwa">using</span> Eigen<span class="hl opt">::</span>Matrix<span class="hl opt">;</span>
+<span class="hl kwa">using</span> Eigen<span class="hl opt">::</span>Matrix3d<span class="hl opt">;</span>
+<span class="hl kwa">using</span> Eigen<span class="hl opt">::</span>Vector3d<span class="hl opt">;</span>
+<span class="hl kwa">using</span> Eigen<span class="hl opt">::</span>Vector4d<span class="hl opt">;</span>
+
+<span class="hl kwa">using</span> tinyxml2<span class="hl opt">::</span>XMLDocument<span class="hl opt">;</span>
+<span class="hl kwa">using</span> tinyxml2<span class="hl opt">::</span>XMLElement<span class="hl opt">;</span>
+
+<span class="hl kwa">using</span> drake<span class="hl opt">::</span>parsers<span class="hl opt">::</span>ModelInstanceIdTable<span class="hl opt">;</span>
+<span class="hl kwa">using</span> drake<span class="hl opt">::</span>multibody<span class="hl opt">::</span>joints<span class="hl opt">::</span>FloatingBaseType<span class="hl opt">;</span>
+<span class="hl kwa">using</span> drake<span class="hl opt">::</span>multibody<span class="hl opt">::</span>joints<span class="hl opt">::</span>kRollPitchYaw<span class="hl opt">;</span>
+
+<span class="hl kwa">namespace</span> <span class="hl opt">{</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">ParseInertial</span><span class="hl opt">(</span>RigidBody<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> body<span class="hl opt">,</span> XMLElement<span class="hl opt">*</span> node<span class="hl opt">) {</span>
+  Isometry3d T <span class="hl opt">=</span> Isometry3d<span class="hl opt">::</span><span class="hl kwd">Identity</span><span class="hl opt">();</span>
+
+  XMLElement<span class="hl opt">*</span> origin <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;origin&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>origin<span class="hl opt">)</span> <span class="hl kwd">originAttributesToTransform</span><span class="hl opt">(</span>origin<span class="hl opt">,</span> T<span class="hl opt">);</span>
+
+  XMLElement<span class="hl opt">*</span> mass <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;mass&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>mass<span class="hl opt">) {</span>
+    <span class="hl kwb">double</span> body_mass <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>mass<span class="hl opt">,</span> <span class="hl str">&quot;value&quot;</span><span class="hl opt">,</span> body_mass<span class="hl opt">);</span>
+    body<span class="hl opt">-&gt;</span><span class="hl kwd">set_mass</span><span class="hl opt">(</span>body_mass<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  Eigen<span class="hl opt">::</span>Vector3d <span class="hl kwd">com</span><span class="hl opt">(</span><span class="hl kwd">T</span><span class="hl opt">(</span><span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">3</span><span class="hl opt">),</span> <span class="hl kwd">T</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">3</span><span class="hl opt">),</span> <span class="hl kwd">T</span><span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">,</span> <span class="hl num">3</span><span class="hl opt">));</span>
+  body<span class="hl opt">-&gt;</span><span class="hl kwd">set_center_of_mass</span><span class="hl opt">(</span>com<span class="hl opt">);</span>
+
+  drake<span class="hl opt">::</span>SquareTwistMatrix<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;</span> I <span class="hl opt">=</span> drake<span class="hl opt">::</span>SquareTwistMatrix<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;::</span><span class="hl kwd">Zero</span><span class="hl opt">();</span>
+  I<span class="hl opt">.</span><span class="hl kwd">block</span><span class="hl opt">(</span><span class="hl num">3</span><span class="hl opt">,</span> <span class="hl num">3</span><span class="hl opt">,</span> <span class="hl num">3</span><span class="hl opt">,</span> <span class="hl num">3</span><span class="hl opt">) &lt;&lt;</span> body<span class="hl opt">-&gt;</span><span class="hl kwd">get_mass</span><span class="hl opt">() *</span> Matrix3d<span class="hl opt">::</span><span class="hl kwd">Identity</span><span class="hl opt">();</span>
+
+  XMLElement<span class="hl opt">*</span> inertia <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;inertia&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>inertia<span class="hl opt">) {</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>inertia<span class="hl opt">,</span> <span class="hl str">&quot;ixx&quot;</span><span class="hl opt">,</span> <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">));</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>inertia<span class="hl opt">,</span> <span class="hl str">&quot;ixy&quot;</span><span class="hl opt">,</span> <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">));</span>
+    <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">) =</span> <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>inertia<span class="hl opt">,</span> <span class="hl str">&quot;ixz&quot;</span><span class="hl opt">,</span> <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">2</span><span class="hl opt">));</span>
+    <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">) =</span> <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">2</span><span class="hl opt">);</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>inertia<span class="hl opt">,</span> <span class="hl str">&quot;iyy&quot;</span><span class="hl opt">,</span> <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">));</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>inertia<span class="hl opt">,</span> <span class="hl str">&quot;iyz&quot;</span><span class="hl opt">,</span> <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">2</span><span class="hl opt">));</span>
+    <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">) =</span> <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">2</span><span class="hl opt">);</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>inertia<span class="hl opt">,</span> <span class="hl str">&quot;izz&quot;</span><span class="hl opt">,</span> <span class="hl kwd">I</span><span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">,</span> <span class="hl num">2</span><span class="hl opt">));</span>
+  <span class="hl opt">}</span>
+
+  body<span class="hl opt">-&gt;</span><span class="hl kwd">set_spatial_inertia</span><span class="hl opt">(</span><span class="hl kwd">transformSpatialInertia</span><span class="hl opt">(</span>T<span class="hl opt">,</span> I<span class="hl opt">));</span>
+<span class="hl opt">}</span>
+
+<span class="hl slc">// Adds a material to the supplied &#64;materials map. Currently, only simple colors</span>
+<span class="hl slc">// are supported.</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// TODO(liang.fok) Add support for texture-based materials. See:</span>
+<span class="hl slc">// https://github.com/RobotLocomotion/drake/issues/2588.</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// &#64;param[in] material_name A human-understandable name of the material.</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// &#64;param[in] color_rgba The red-green-blue-alpha color values of the material.</span>
+<span class="hl slc">// The range of values is [0, 1].</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// &#64;param[in] abort_if_name_clash If true, this method will abort if</span>
+<span class="hl slc">// &#64;p material_name is already in &#64;p materials regardless of whether the RGBA</span>
+<span class="hl slc">// values are the same. If false, this method will abort if</span>
+<span class="hl slc">// &#64;p material_name is already in &#64;p materials and the infinity norm of the</span>
+<span class="hl slc">// difference is greater than 1e-10.</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// &#64;param[out] materials A pointer to the map in which to store the material.</span>
+<span class="hl slc">// This cannot be nullptr.</span>
+<span class="hl kwb">void</span> <span class="hl kwd">AddMaterialToMaterialMap</span><span class="hl opt">(</span><span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> material_name<span class="hl opt">,</span>
+                              <span class="hl kwb">const</span> Vector4d<span class="hl opt">&amp;</span> color_rgba<span class="hl opt">,</span>
+                              <span class="hl kwb">bool</span> abort_if_name_clash<span class="hl opt">,</span>
+                              MaterialMap<span class="hl opt">*</span> materials<span class="hl opt">) {</span>
+  <span class="hl slc">// Verifies that parameter materials is not nullptr.</span>
+  <span class="hl kwd">DRAKE_DEMAND</span><span class="hl opt">(</span>materials<span class="hl opt">);</span>
+
+  <span class="hl slc">// Determines if the material is already in the map.</span>
+  <span class="hl kwc">auto</span> material_iter <span class="hl opt">=</span> materials<span class="hl opt">-&gt;</span><span class="hl kwd">find</span><span class="hl opt">(</span>material_name<span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>material_iter <span class="hl opt">!=</span> materials<span class="hl opt">-&gt;</span><span class="hl kwd">end</span><span class="hl opt">()) {</span>
+    <span class="hl slc">// The material is already in the map. Checks whether the old material is</span>
+    <span class="hl slc">// the same as the new material.  The range of values in the RGBA vectors</span>
+    <span class="hl slc">// is [0, 1].</span>
+    <span class="hl kwb">const</span> <span class="hl kwc">auto</span><span class="hl opt">&amp;</span> existing_color <span class="hl opt">=</span> material_iter<span class="hl opt">-&gt;</span>second<span class="hl opt">;</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>abort_if_name_clash <span class="hl opt">|| (</span>color_rgba <span class="hl opt">!=</span> existing_color<span class="hl opt">)) {</span>
+      <span class="hl slc">// The materials map already has the material_name key but the color</span>
+      <span class="hl slc">// associated with it is different.</span>
+      stringstream error_buff<span class="hl opt">;</span>
+      error_buff <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+                 <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;Material</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> material_name <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span> <span class="hl str">was previously &quot;</span>
+                 <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;defined.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+                 <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;  - existing RGBA values: &quot;</span> <span class="hl opt">&lt;&lt;</span> existing_color<span class="hl opt">.</span><span class="hl kwd">transpose</span><span class="hl opt">()</span>
+                 <span class="hl opt">&lt;&lt;</span> std<span class="hl opt">::</span>endl
+                 <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;  - new RGBA values: &quot;</span> <span class="hl opt">&lt;&lt;</span> color_rgba<span class="hl opt">.</span><span class="hl kwd">transpose</span><span class="hl opt">()</span>
+                 <span class="hl opt">&lt;&lt;</span> std<span class="hl opt">::</span>endl<span class="hl opt">;</span>
+      <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">runtime_error</span><span class="hl opt">(</span>error_buff<span class="hl opt">.</span><span class="hl kwd">str</span><span class="hl opt">());</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+    <span class="hl slc">// Adds the new color to the materials map.</span>
+    <span class="hl opt">(*</span>materials<span class="hl opt">)[</span>material_name<span class="hl opt">] =</span> color_rgba<span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl slc">// TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).</span>
+<span class="hl kwb">void</span> <span class="hl kwd">ParseMaterial</span><span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span> MaterialMap<span class="hl opt">&amp;</span> materials<span class="hl opt">) {</span>
+  <span class="hl kwb">const char</span><span class="hl opt">*</span> attr<span class="hl opt">;</span>
+  attr <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr <span class="hl opt">||</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>attr<span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+        <span class="hl str">&quot;Material tag is missing a name.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  string <span class="hl kwd">name</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+
+  Vector4d rgba <span class="hl opt">=</span> Vector4d<span class="hl opt">::</span><span class="hl kwd">Zero</span><span class="hl opt">();</span>  <span class="hl slc">// Defaults to black.</span>
+
+  XMLElement<span class="hl opt">*</span> color_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;color&quot;</span><span class="hl opt">);</span>
+
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>color_node<span class="hl opt">) {</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">parseVectorAttribute</span><span class="hl opt">(</span>color_node<span class="hl opt">,</span> <span class="hl str">&quot;rgba&quot;</span><span class="hl opt">,</span> rgba<span class="hl opt">)) {</span>
+      <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+          <span class="hl str">&quot;Color tag is missing rgba attribute.&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwd">AddMaterialToMaterialMap</span><span class="hl opt">(</span>name<span class="hl opt">,</span> rgba<span class="hl opt">,</span> <span class="hl kwa">true</span> <span class="hl com">/* abort_if_name_clash */</span><span class="hl opt">,</span>
+        <span class="hl opt">&amp;</span>materials<span class="hl opt">);</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+    <span class="hl slc">// If no color was specified and the material is not in the materials map,</span>
+    <span class="hl slc">// check if the material is texture-based. If it is, print a warning, use</span>
+    <span class="hl slc">// default color (black), and then return.</span>
+    <span class="hl slc">//</span>
+    <span class="hl slc">// Otherwise, throw an exception.</span>
+    <span class="hl slc">//</span>
+    <span class="hl slc">// TODO(liang.fok): Update this logic once texture-based materials are</span>
+    <span class="hl slc">// supported. See: https://github.com/RobotLocomotion/drake/issues/2588.</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>materials<span class="hl opt">.</span><span class="hl kwd">find</span><span class="hl opt">(</span>name<span class="hl opt">) ==</span> materials<span class="hl opt">.</span><span class="hl kwd">end</span><span class="hl opt">()) {</span>
+      XMLElement<span class="hl opt">*</span> texture_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;texture&quot;</span><span class="hl opt">);</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>texture_node<span class="hl opt">) {</span>
+        std<span class="hl opt">::</span>cerr
+            <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: WARNING: Material</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span>
+            <span class="hl opt">&lt;&lt;</span> name <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span> <span class="hl str">is a texture. Textures are currently not supported. &quot;</span>
+            <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;For more information, see: &quot;</span>
+            <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;https://github.com/RobotLocomotion/drake/issues/2588. &quot;</span>
+               <span class="hl str">&quot;Defaulting to use the black color for this material.&quot;</span>
+            <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+        <span class="hl kwd">AddMaterialToMaterialMap</span><span class="hl opt">(</span>name<span class="hl opt">,</span> rgba<span class="hl opt">,</span> <span class="hl kwa">true</span> <span class="hl com">/* abort_if_name_clash */</span><span class="hl opt">,</span>
+            <span class="hl opt">&amp;</span>materials<span class="hl opt">);</span>
+      <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: &quot;</span>
+            <span class="hl str">&quot;ERROR: Material</span><span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> name <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span> <span class="hl str">not previously defined. Therefore &quot;</span>
+            <span class="hl str">&quot;a color must be specified.&quot;</span><span class="hl opt">);</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">bool</span> <span class="hl kwd">ParseGeometry</span><span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span> <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+                   <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> root_dir<span class="hl opt">,</span>
+                   <span class="hl slc">// TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).</span>
+                   DrakeShapes<span class="hl opt">::</span>Element<span class="hl opt">&amp;</span> element<span class="hl opt">) {</span>
+  <span class="hl slc">// DEBUG</span>
+  <span class="hl slc">// cout &lt;&lt; &quot;ParseGeometry: START&quot; &lt;&lt; endl;</span>
+  <span class="hl slc">// END_DEBUG</span>
+  <span class="hl kwb">const char</span><span class="hl opt">*</span> attr<span class="hl opt">;</span>
+  XMLElement<span class="hl opt">*</span> shape_node<span class="hl opt">;</span>
+  <span class="hl kwa">if</span> <span class="hl opt">((</span>shape_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;box&quot;</span><span class="hl opt">))) {</span>
+    <span class="hl kwb">double</span> x <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">,</span> y <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">,</span> z <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    attr <span class="hl opt">=</span> shape_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;size&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>attr<span class="hl opt">) {</span>
+      stringstream <span class="hl kwd">s</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+      s <span class="hl opt">&gt;&gt;</span> x <span class="hl opt">&gt;&gt;</span> y <span class="hl opt">&gt;&gt;</span> z<span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR parsing box &quot;</span>
+          <span class="hl str">&quot;element size&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+      <span class="hl kwa">return false</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    element<span class="hl opt">.</span><span class="hl kwd">setGeometry</span><span class="hl opt">(</span>DrakeShapes<span class="hl opt">::</span><span class="hl kwd">Box</span><span class="hl opt">(</span><span class="hl kwd">Vector3d</span><span class="hl opt">(</span>x<span class="hl opt">,</span> y<span class="hl opt">,</span> z<span class="hl opt">)));</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">((</span>shape_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;sphere&quot;</span><span class="hl opt">))) {</span>
+    <span class="hl kwb">double</span> r <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    attr <span class="hl opt">=</span> shape_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;radius&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>attr<span class="hl opt">) {</span>
+      stringstream <span class="hl kwd">s</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+      s <span class="hl opt">&gt;&gt;</span> r<span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR parsing sphere &quot;</span>
+          <span class="hl str">&quot;element radius&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+      <span class="hl kwa">return false</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    element<span class="hl opt">.</span><span class="hl kwd">setGeometry</span><span class="hl opt">(</span>DrakeShapes<span class="hl opt">::</span><span class="hl kwd">Sphere</span><span class="hl opt">(</span><span class="hl kwd">max</span><span class="hl opt">(</span>DrakeShapes<span class="hl opt">::</span>MIN_RADIUS<span class="hl opt">,</span> r<span class="hl opt">)));</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">((</span>shape_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;cylinder&quot;</span><span class="hl opt">))) {</span>
+    <span class="hl kwb">double</span> r <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">,</span> l <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    attr <span class="hl opt">=</span> shape_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;radius&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>attr<span class="hl opt">) {</span>
+      stringstream <span class="hl kwd">s</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+      s <span class="hl opt">&gt;&gt;</span> r<span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR parsing cylinder &quot;</span>
+          <span class="hl str">&quot;element radius&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+      <span class="hl kwa">return false</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    attr <span class="hl opt">=</span> shape_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;length&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>attr<span class="hl opt">) {</span>
+      stringstream <span class="hl kwd">s</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+      s <span class="hl opt">&gt;&gt;</span> l<span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR parsing cylinder &quot;</span>
+         <span class="hl str">&quot;element length&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+      <span class="hl kwa">return false</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    element<span class="hl opt">.</span><span class="hl kwd">setGeometry</span><span class="hl opt">(</span>DrakeShapes<span class="hl opt">::</span><span class="hl kwd">Cylinder</span><span class="hl opt">(</span>r<span class="hl opt">,</span> l<span class="hl opt">));</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">((</span>shape_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;capsule&quot;</span><span class="hl opt">))) {</span>
+    <span class="hl kwb">double</span> r <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">,</span> l <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    attr <span class="hl opt">=</span> shape_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;radius&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>attr<span class="hl opt">) {</span>
+      stringstream <span class="hl kwd">s</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+      s <span class="hl opt">&gt;&gt;</span> r<span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR parsing capsule &quot;</span>
+          <span class="hl str">&quot;element radius&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+      <span class="hl kwa">return false</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    attr <span class="hl opt">=</span> shape_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;length&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>attr<span class="hl opt">) {</span>
+      stringstream <span class="hl kwd">s</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+      s <span class="hl opt">&gt;&gt;</span> l<span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: Failed to parse &quot;</span>
+          <span class="hl str">&quot;capsule element length&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+      <span class="hl kwa">return false</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    element<span class="hl opt">.</span><span class="hl kwd">setGeometry</span><span class="hl opt">(</span>DrakeShapes<span class="hl opt">::</span><span class="hl kwd">Capsule</span><span class="hl opt">(</span>r<span class="hl opt">,</span> l<span class="hl opt">));</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">((</span>shape_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;mesh&quot;</span><span class="hl opt">))) {</span>
+    attr <span class="hl opt">=</span> shape_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;filename&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+      cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: Mesh element has &quot;</span>
+          <span class="hl str">&quot;no filename tag&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+      <span class="hl kwa">return false</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    string <span class="hl kwd">filename</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+
+    <span class="hl slc">// This method will return an empty string if the file is not found or</span>
+    <span class="hl slc">// resolved within a ROS package.</span>
+    string resolved_filename <span class="hl opt">=</span>
+        <span class="hl kwd">ResolveFilename</span><span class="hl opt">(</span>filename<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>resolved_filename<span class="hl opt">.</span><span class="hl kwd">empty</span><span class="hl opt">()) {</span>
+      <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+          <span class="hl str">&quot;Mesh file name could not be resolved from the provided uri</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span>
+          filename <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span><span class="hl str">.&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    DrakeShapes<span class="hl opt">::</span>Mesh <span class="hl kwd">mesh</span><span class="hl opt">(</span>filename<span class="hl opt">,</span> resolved_filename<span class="hl opt">);</span>
+
+    <span class="hl slc">// Obtains the scale of the mesh if it exists.</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>shape_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;scale&quot;</span><span class="hl opt">) !=</span> <span class="hl kwc">nullptr</span><span class="hl opt">)</span>
+      <span class="hl kwd">ParseThreeVectorAttribute</span><span class="hl opt">(</span>shape_node<span class="hl opt">,</span> <span class="hl str">&quot;scale&quot;</span><span class="hl opt">, &amp;</span>mesh<span class="hl opt">.</span>scale_<span class="hl opt">);</span>
+
+    element<span class="hl opt">.</span><span class="hl kwd">setGeometry</span><span class="hl opt">(</span>mesh<span class="hl opt">);</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+    cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: Warning: geometry element &quot;</span>
+      <span class="hl str">&quot;has an unknown type and will be ignored.&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+  <span class="hl slc">// DEBUG</span>
+  <span class="hl slc">// cout &lt;&lt; &quot;ParseGeometry: END&quot; &lt;&lt; endl;</span>
+  <span class="hl slc">// END_DEBUG</span>
+  <span class="hl kwa">return true</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl slc">// Parses the URDF visual specification of a link. Currently, only colors are</span>
+<span class="hl slc">// supported.</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// TODO(liang.fok) Add support for textures. See:</span>
+<span class="hl slc">// https://github.com/RobotLocomotion/drake/issues/2588</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// For color visualizations that are named, this method adds the name and color</span>
+<span class="hl slc">// tuple into the materials map.</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// A warning is printed to std::cerr if a material is not set for the rigid</span>
+<span class="hl slc">// body's visualization.</span>
+<span class="hl kwb">void</span> <span class="hl kwd">ParseVisual</span><span class="hl opt">(</span>RigidBody<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> body<span class="hl opt">,</span> XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+                 MaterialMap<span class="hl opt">*</span> materials<span class="hl opt">,</span> <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+                 <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> root_dir<span class="hl opt">) {</span>
+  <span class="hl slc">// Ensures there is a geometry child element. Since this is a required</span>
+  <span class="hl slc">// element, throws an exception if a geometry element does not exist.</span>
+  XMLElement<span class="hl opt">*</span> geometry_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;geometry&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>geometry_node<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: Link &quot;</span> <span class="hl opt">+</span>
+        body<span class="hl opt">-&gt;</span><span class="hl kwd">get_name</span><span class="hl opt">() +</span> <span class="hl str">&quot; has a visual element without geometry.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Obtains the reference frame of the visualization relative to the reference</span>
+  <span class="hl slc">// frame of the rigid body that is being visualized. It defaults to identity</span>
+  <span class="hl slc">// if no transform is specified.</span>
+  Isometry3d T_element_to_link <span class="hl opt">=</span> Isometry3d<span class="hl opt">::</span><span class="hl kwd">Identity</span><span class="hl opt">();</span>
+  <span class="hl opt">{</span>
+    XMLElement<span class="hl opt">*</span> origin <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;origin&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>origin<span class="hl opt">)</span> <span class="hl kwd">originAttributesToTransform</span><span class="hl opt">(</span>origin<span class="hl opt">,</span> T_element_to_link<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  DrakeShapes<span class="hl opt">::</span>VisualElement <span class="hl kwd">element</span><span class="hl opt">(</span>T_element_to_link<span class="hl opt">);</span>
+
+  <span class="hl slc">// Parses the geometry specifications of the visualization.</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">ParseGeometry</span><span class="hl opt">(</span>geometry_node<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">,</span> element<span class="hl opt">)) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: Failed &quot;</span>
+        <span class="hl str">&quot;to parse visual element in link &quot;</span> <span class="hl opt">+</span> body<span class="hl opt">-&gt;</span><span class="hl kwd">get_name</span><span class="hl opt">() +</span> <span class="hl str">&quot;.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Parses the material specification of the visualization. Note that we cannot</span>
+  <span class="hl slc">// reuse the logic within ParseMaterial() here because the context is</span>
+  <span class="hl slc">// different. Whereas ParseMaterial() parses material specifications that</span>
+  <span class="hl slc">// are children elements of the &quot;robot&quot; element, the material specification</span>
+  <span class="hl slc">// being parsed here are children of a &quot;visual&quot; element. One key difference is</span>
+  <span class="hl slc">// the XML here may not specify a &quot;name&quot; attribute. Because of this difference</span>
+  <span class="hl slc">// in context, we need specialized logic here to determine the material</span>
+  <span class="hl slc">// visualization of a link.</span>
+  XMLElement<span class="hl opt">*</span> material_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;material&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>material_node<span class="hl opt">) {</span>
+    <span class="hl slc">// Checks and remembers whether a &quot;color&quot; child element exists. If so,</span>
+    <span class="hl slc">// parses the color value.</span>
+    <span class="hl kwb">bool</span> color_specified <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+    Vector4d rgba<span class="hl opt">;</span>
+    <span class="hl opt">{</span>
+      XMLElement<span class="hl opt">*</span> color_node <span class="hl opt">=</span> material_node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;color&quot;</span><span class="hl opt">);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>color_node<span class="hl opt">) {</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">parseVectorAttribute</span><span class="hl opt">(</span>color_node<span class="hl opt">,</span> <span class="hl str">&quot;rgba&quot;</span><span class="hl opt">,</span> rgba<span class="hl opt">)) {</span>
+          <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+              <span class="hl str">&quot;Failed to parse color of material for model</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span>
+              body<span class="hl opt">-&gt;</span><span class="hl kwd">get_model_name</span><span class="hl opt">() +</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span><span class="hl str">, link</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> body<span class="hl opt">-&gt;</span><span class="hl kwd">get_name</span><span class="hl opt">() +</span>
+              <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span><span class="hl str">.&quot;</span><span class="hl opt">);</span>
+        <span class="hl opt">}</span>
+        color_specified <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// Checks and remembers whether a &quot;name&quot; attribute exists. If so, parses the</span>
+    <span class="hl slc">// name value.</span>
+    string material_name<span class="hl opt">;</span>
+    <span class="hl kwb">bool</span> name_specified <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+    <span class="hl opt">{</span>
+      <span class="hl kwb">const char</span><span class="hl opt">*</span> attr <span class="hl opt">=</span> material_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">);</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>attr <span class="hl opt">!=</span> <span class="hl kwc">nullptr</span> <span class="hl opt">&amp;&amp;</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>attr<span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+        material_name <span class="hl opt">=</span> <span class="hl kwd">string</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+        name_specified <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// Adds the material to the materials map if both the name and color are</span>
+    <span class="hl slc">// specified. This is so that link elements that reside later in the URDF</span>
+    <span class="hl slc">// can reference this material in their visualization elements. Note that</span>
+    <span class="hl slc">// this capability is not specified by the official URDF specification (see:</span>
+    <span class="hl slc">// http://wiki.ros.org/urdf/XML/link), but is needed by certain URDFs</span>
+    <span class="hl slc">// released by companies and organizations like Robotiq and ROS Industrial</span>
+    <span class="hl slc">// (for example, see this URDF by Robotiq: http://bit.ly/28P0pmo).</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>color_specified <span class="hl opt">&amp;&amp;</span> name_specified<span class="hl opt">) {</span>
+      <span class="hl slc">// The `abort_if_name_clash` parameter is passed a value of `false` to</span>
+      <span class="hl slc">// allow the same material to be defined across multiple links as long as</span>
+      <span class="hl slc">// they correspond to the same RGBA value. This can happen, for example,</span>
+      <span class="hl slc">// in URDFs that are automatically generated using `xacro` since `xacro`</span>
+      <span class="hl slc">// may produce a URDF from multiple `.xacro` files. Through testing, we</span>
+      <span class="hl slc">// determined that the Gazebo simulator supports loading URDFs containing</span>
+      <span class="hl slc">// duplicate material specifications as long as the duplicates are</span>
+      <span class="hl slc">// distributed across multiple `&lt;link&gt;` elements and are not at the</span>
+      <span class="hl slc">// `&lt;robot&gt;` level.</span>
+      <span class="hl kwd">AddMaterialToMaterialMap</span><span class="hl opt">(</span>material_name<span class="hl opt">,</span> rgba<span class="hl opt">,</span>
+          <span class="hl kwa">false</span> <span class="hl com">/* abort_if_name_clash */</span><span class="hl opt">,</span> materials<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// Sets the material's color.</span>
+    <span class="hl kwb">bool</span> material_set <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+    <span class="hl opt">{</span>
+      <span class="hl slc">// If the color is specified as a child element of the current material</span>
+      <span class="hl slc">// node, use that color. It takes precedence over any material saved in</span>
+      <span class="hl slc">// the material map.</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>color_specified<span class="hl opt">) {</span>
+        element<span class="hl opt">.</span><span class="hl kwd">setMaterial</span><span class="hl opt">(</span>rgba<span class="hl opt">);</span>
+        material_set <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl slc">// No color specified. Checks if the material is already in the</span>
+        <span class="hl slc">// materials map.</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>name_specified<span class="hl opt">) {</span>
+          <span class="hl kwc">auto</span> material_iter <span class="hl opt">=</span> materials<span class="hl opt">-&gt;</span><span class="hl kwd">find</span><span class="hl opt">(</span>material_name<span class="hl opt">);</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>material_iter <span class="hl opt">!=</span> materials<span class="hl opt">-&gt;</span><span class="hl kwd">end</span><span class="hl opt">()) {</span>
+            <span class="hl slc">// The material is in the map. Sets the material of the visual</span>
+            <span class="hl slc">// element based on the value in the map.</span>
+            element<span class="hl opt">.</span><span class="hl kwd">setMaterial</span><span class="hl opt">(</span>material_iter<span class="hl opt">-&gt;</span>second<span class="hl opt">);</span>
+            material_set <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// Throws a std::runtime_error if the material was not set for this</span>
+    <span class="hl slc">// visualization.</span>
+    <span class="hl slc">//</span>
+    <span class="hl slc">// TODO(liang.fok): Update this logic once texture-based materials are</span>
+    <span class="hl slc">// supported. See: https://github.com/RobotLocomotion/drake/issues/2588.</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span>material_set<span class="hl opt">) {</span>
+      stringstream error_buff<span class="hl opt">;</span>
+      error_buff
+          <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: WARNING: Visual element &quot;</span>
+          <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;has a material whose color could not be determined.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+          <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;  - model name: &quot;</span> <span class="hl opt">&lt;&lt;</span> body<span class="hl opt">-&gt;</span><span class="hl kwd">get_model_name</span><span class="hl opt">() &lt;&lt;</span> <span class="hl str">&quot;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+          <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;  - body name: &quot;</span> <span class="hl opt">&lt;&lt;</span> body<span class="hl opt">-&gt;</span><span class="hl kwd">get_name</span><span class="hl opt">() &lt;&lt;</span> <span class="hl str">&quot;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+          <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;  - material name: &quot;</span> <span class="hl opt">&lt;&lt;</span> material_name <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">;</span>
+      <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">runtime_error</span><span class="hl opt">(</span>error_buff<span class="hl opt">.</span><span class="hl kwd">str</span><span class="hl opt">());</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>element<span class="hl opt">.</span><span class="hl kwd">hasGeometry</span><span class="hl opt">())</span> body<span class="hl opt">-&gt;</span><span class="hl kwd">AddVisualElement</span><span class="hl opt">(</span>element<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">ParseCollision</span><span class="hl opt">(</span>RigidBody<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> body<span class="hl opt">,</span> XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+                    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">,</span>
+                    <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span> <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> root_dir<span class="hl opt">) {</span>
+  Isometry3d T_element_to_link <span class="hl opt">=</span> Isometry3d<span class="hl opt">::</span><span class="hl kwd">Identity</span><span class="hl opt">();</span>
+  XMLElement<span class="hl opt">*</span> origin <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;origin&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>origin<span class="hl opt">)</span> <span class="hl kwd">originAttributesToTransform</span><span class="hl opt">(</span>origin<span class="hl opt">,</span> T_element_to_link<span class="hl opt">);</span>
+
+  <span class="hl kwb">const char</span><span class="hl opt">*</span> attr<span class="hl opt">;</span>
+  string group_name<span class="hl opt">;</span>
+
+  attr <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;group&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>attr<span class="hl opt">) {</span>
+    group_name <span class="hl opt">=</span> attr<span class="hl opt">;</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+    group_name <span class="hl opt">=</span> <span class="hl str">&quot;default&quot;</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  XMLElement<span class="hl opt">*</span> geometry_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;geometry&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>geometry_node<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: Link &quot;</span> <span class="hl opt">+</span>
+        body<span class="hl opt">-&gt;</span><span class="hl kwd">get_name</span><span class="hl opt">() +</span> <span class="hl str">&quot; has a collision element without geometry&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  DrakeCollision<span class="hl opt">::</span>Element <span class="hl kwd">element</span><span class="hl opt">(</span>T_element_to_link<span class="hl opt">,</span> body<span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">ParseGeometry</span><span class="hl opt">(</span>geometry_node<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">,</span> element<span class="hl opt">)) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: Failed &quot;</span>
+        <span class="hl str">&quot;to parse collision element in link &quot;</span> <span class="hl opt">+</span> body<span class="hl opt">-&gt;</span><span class="hl kwd">get_name</span><span class="hl opt">() +</span> <span class="hl str">&quot;.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>element<span class="hl opt">.</span><span class="hl kwd">hasGeometry</span><span class="hl opt">()) {</span>
+    tree<span class="hl opt">-&gt;</span><span class="hl kwd">addCollisionElement</span><span class="hl opt">(</span>element<span class="hl opt">, *</span>body<span class="hl opt">,</span> group_name<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">bool</span> <span class="hl kwd">ParseBody</span><span class="hl opt">(</span>RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">,</span> string robot_name<span class="hl opt">,</span> XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+               MaterialMap<span class="hl opt">*</span> materials<span class="hl opt">,</span> <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+               <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> root_dir<span class="hl opt">,</span> <span class="hl kwb">int</span> model_instance_id<span class="hl opt">,</span> <span class="hl kwb">int</span><span class="hl opt">*</span> index<span class="hl opt">) {</span>
+  <span class="hl kwb">const char</span><span class="hl opt">*</span> attr <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;drake_ignore&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>attr <span class="hl opt">&amp;&amp; (</span>std<span class="hl opt">::</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>attr<span class="hl opt">,</span> <span class="hl str">&quot;true&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">))</span> <span class="hl kwa">return false</span><span class="hl opt">;</span>
+
+  RigidBody<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> body<span class="hl opt">{</span><span class="hl kwc">nullptr</span><span class="hl opt">};</span>
+  std<span class="hl opt">::</span>unique_ptr<span class="hl opt">&lt;</span>RigidBody<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> <span class="hl kwd">owned_body</span><span class="hl opt">(</span>body <span class="hl opt">=</span> <span class="hl kwa">new</span> RigidBody<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;());</span>
+  body<span class="hl opt">-&gt;</span><span class="hl kwd">set_model_name</span><span class="hl opt">(</span>robot_name<span class="hl opt">);</span>
+  body<span class="hl opt">-&gt;</span><span class="hl kwd">set_model_instance_id</span><span class="hl opt">(</span>model_instance_id<span class="hl opt">);</span>
+
+  attr <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: &quot;</span>
+        <span class="hl str">&quot;ERROR: link tag is missing name attribute.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// World links are handled by ParseWorldJoint().</span>
+  body<span class="hl opt">-&gt;</span><span class="hl kwd">set_name</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>body<span class="hl opt">-&gt;</span><span class="hl kwd">get_name</span><span class="hl opt">() ==</span> <span class="hl kwd">string</span><span class="hl opt">(</span>RigidBodyTreeConstants<span class="hl opt">::</span>kWorldName<span class="hl opt">))</span>
+    <span class="hl kwa">return false</span><span class="hl opt">;</span>
+
+  XMLElement<span class="hl opt">*</span> inertial_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;inertial&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>inertial_node<span class="hl opt">)</span> <span class="hl kwd">ParseInertial</span><span class="hl opt">(</span>body<span class="hl opt">,</span> inertial_node<span class="hl opt">);</span>
+
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> visual_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;visual&quot;</span><span class="hl opt">);</span> visual_node<span class="hl opt">;</span>
+       visual_node <span class="hl opt">=</span> visual_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;visual&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwd">ParseVisual</span><span class="hl opt">(</span>body<span class="hl opt">,</span> visual_node<span class="hl opt">,</span> materials<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> collision_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;collision&quot;</span><span class="hl opt">);</span>
+       collision_node<span class="hl opt">;</span>
+       collision_node <span class="hl opt">=</span> collision_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;collision&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwd">ParseCollision</span><span class="hl opt">(</span>body<span class="hl opt">,</span> collision_node<span class="hl opt">,</span> tree<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  tree<span class="hl opt">-&gt;</span><span class="hl kwd">add_rigid_body</span><span class="hl opt">(</span>std<span class="hl opt">::</span><span class="hl kwd">move</span><span class="hl opt">(</span>owned_body<span class="hl opt">));</span>
+  <span class="hl opt">*</span>index <span class="hl opt">=</span> body<span class="hl opt">-&gt;</span><span class="hl kwd">get_body_index</span><span class="hl opt">();</span>
+  <span class="hl kwa">return true</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwc">template</span> <span class="hl opt">&lt;</span>typename JointType<span class="hl opt">&gt;</span>
+<span class="hl kwb">void</span> <span class="hl kwd">SetLimits</span><span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span> FixedAxisOneDoFJoint<span class="hl opt">&lt;</span>JointType<span class="hl opt">&gt;*</span> fjoint<span class="hl opt">) {</span>
+  XMLElement<span class="hl opt">*</span> limit_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;limit&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>fjoint <span class="hl opt">!=</span> <span class="hl kwc">nullptr</span> <span class="hl opt">&amp;&amp;</span> limit_node<span class="hl opt">) {</span>
+    <span class="hl kwb">double</span> lower <span class="hl opt">= -</span>numeric_limits<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;::</span><span class="hl kwd">infinity</span><span class="hl opt">(),</span>
+           upper <span class="hl opt">=</span> numeric_limits<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;::</span><span class="hl kwd">infinity</span><span class="hl opt">();</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>limit_node<span class="hl opt">,</span> <span class="hl str">&quot;lower&quot;</span><span class="hl opt">,</span> lower<span class="hl opt">);</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>limit_node<span class="hl opt">,</span> <span class="hl str">&quot;upper&quot;</span><span class="hl opt">,</span> upper<span class="hl opt">);</span>
+    fjoint<span class="hl opt">-&gt;</span><span class="hl kwd">setJointLimits</span><span class="hl opt">(</span>lower<span class="hl opt">,</span> upper<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwc">template</span> <span class="hl opt">&lt;</span>typename JointType<span class="hl opt">&gt;</span>
+<span class="hl kwb">void</span> <span class="hl kwd">SetDynamics</span><span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span> FixedAxisOneDoFJoint<span class="hl opt">&lt;</span>JointType<span class="hl opt">&gt;*</span> fjoint<span class="hl opt">) {</span>
+  XMLElement<span class="hl opt">*</span> dynamics_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;dynamics&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>fjoint <span class="hl opt">!=</span> <span class="hl kwc">nullptr</span> <span class="hl opt">&amp;&amp;</span> dynamics_node<span class="hl opt">) {</span>
+    <span class="hl kwb">double</span> damping <span class="hl opt">=</span> <span class="hl num">0.0</span><span class="hl opt">,</span> coulomb_friction <span class="hl opt">=</span> <span class="hl num">0.0</span><span class="hl opt">,</span> coulomb_window <span class="hl opt">=</span> <span class="hl num">0.0</span><span class="hl opt">;</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>dynamics_node<span class="hl opt">,</span> <span class="hl str">&quot;damping&quot;</span><span class="hl opt">,</span> damping<span class="hl opt">);</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>dynamics_node<span class="hl opt">,</span> <span class="hl str">&quot;friction&quot;</span><span class="hl opt">,</span> coulomb_friction<span class="hl opt">);</span>
+    <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>dynamics_node<span class="hl opt">,</span> <span class="hl str">&quot;coulomb_window&quot;</span><span class="hl opt">,</span> coulomb_window<span class="hl opt">);</span>
+    fjoint<span class="hl opt">-&gt;</span><span class="hl kwd">setDynamics</span><span class="hl opt">(</span>damping<span class="hl opt">,</span> coulomb_friction<span class="hl opt">,</span> coulomb_window<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl com">/**</span>
+<span class="hl com"> * Parses the URDF collision filter group specification. Attempts to add</span>
+<span class="hl com"> * collision filter groups (with their member lists and ignore lists) to the</span>
+<span class="hl com"> * tree specification.  Inconsistent definitions will lead to thrown</span>
+<span class="hl com"> * exceptions.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;param tree                  The rigid body tree containing the bodies to</span>
+<span class="hl com"> *                              which the filters will be applied.</span>
+<span class="hl com"> * &#64;param node                  The XML node containing the filter details.</span>
+<span class="hl com"> * &#64;param model_instance_id     The id of the current model instance.</span>
+<span class="hl com"> */</span>
+<span class="hl kwb">void</span> <span class="hl kwd">ParseCollisionFilterGroup</span><span class="hl opt">(</span>RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">,</span> XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+                               <span class="hl kwb">int</span> model_instance_id<span class="hl opt">) {</span>
+  <span class="hl kwb">const char</span><span class="hl opt">*</span> attr <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;drake_ignore&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>attr <span class="hl opt">&amp;&amp; (</span>std<span class="hl opt">::</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>attr<span class="hl opt">,</span> <span class="hl str">&quot;true&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">))</span> <span class="hl kwa">return</span><span class="hl opt">;</span>
+
+  <span class="hl slc">// TODO(SeanCurtis-TRI): After upgrading to newest tinyxml, add line numbers</span>
+  <span class="hl slc">// to error messages.</span>
+  attr <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+        <span class="hl str">&quot;Collision filter group specification missing name attribute.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  string <span class="hl kwd">group_name</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+
+  tree<span class="hl opt">-&gt;</span><span class="hl kwd">DefineCollisionFilterGroup</span><span class="hl opt">(</span>group_name<span class="hl opt">);</span>
+
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> member_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;member&quot;</span><span class="hl opt">);</span> member_node<span class="hl opt">;</span>
+       member_node <span class="hl opt">=</span> member_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;member&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwb">const char</span><span class="hl opt">*</span> link_name <span class="hl opt">=</span> member_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;link&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span>link_name<span class="hl opt">) {</span>
+      <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: Collision &quot;</span>
+          <span class="hl str">&quot;filter group &quot;</span> <span class="hl opt">+</span> group_name <span class="hl opt">+</span> <span class="hl str">&quot; provides a member tag without &quot;</span>
+          <span class="hl str">&quot;specifying the</span> <span class="hl esc">\&quot;</span><span class="hl str">link</span><span class="hl esc">\&quot;</span> <span class="hl str">attribute.&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    tree<span class="hl opt">-&gt;</span><span class="hl kwd">AddCollisionFilterGroupMember</span><span class="hl opt">(</span>group_name<span class="hl opt">,</span> link_name<span class="hl opt">,</span>
+                                        model_instance_id<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> ignore_node <span class="hl opt">=</span>
+           node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;ignored_collision_filter_group&quot;</span><span class="hl opt">);</span>
+       ignore_node<span class="hl opt">;</span> ignore_node <span class="hl opt">=</span> ignore_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span>
+                        <span class="hl str">&quot;ignored_collision_filter_group&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwb">const char</span><span class="hl opt">*</span> target_name <span class="hl opt">=</span> ignore_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;collision_filter_group&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span>target_name<span class="hl opt">) {</span>
+      <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span>
+          <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: Collision filter group &quot;</span>
+          <span class="hl str">&quot;provides a tag specifying a group to ignore without specifying the &quot;</span>
+          <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span><span class="hl str">collision_filter_group</span><span class="hl esc">\&quot;</span> <span class="hl str">attribute.&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    tree<span class="hl opt">-&gt;</span><span class="hl kwd">AddCollisionFilterIgnoreTarget</span><span class="hl opt">(</span>group_name<span class="hl opt">,</span> target_name<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl com">/**</span>
+<span class="hl com"> * Parses a joint URDF specification to obtain the names of the joint, parent</span>
+<span class="hl com"> * link, child link, and the joint type. An exception is thrown if any of these</span>
+<span class="hl com"> * names cannot be determined.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;param[in] node The XML node parsing the URDF joint description.</span>
+<span class="hl com"> * &#64;param[out] name A reference to a string where the name of the joint</span>
+<span class="hl com"> * should be saved.</span>
+<span class="hl com"> * &#64;param[out] type A reference to a string where the joint type should be</span>
+<span class="hl com"> * saved.</span>
+<span class="hl com"> * &#64;param[out] parent_link_name A reference to a string where the name of the</span>
+<span class="hl com"> * parent link should be saved.</span>
+<span class="hl com"> * &#64;param[out] child_link_name A reference to a string where the name of the</span>
+<span class="hl com"> * child link should be saved.</span>
+<span class="hl com"> */</span>
+<span class="hl kwb">void</span> <span class="hl kwd">ParseJointKeyParams</span><span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+                         <span class="hl slc">// TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).</span>
+                         string<span class="hl opt">&amp;</span> name<span class="hl opt">,</span>
+                         <span class="hl slc">// TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).</span>
+                         string<span class="hl opt">&amp;</span> type<span class="hl opt">,</span>
+                         <span class="hl slc">// TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).</span>
+                         string<span class="hl opt">&amp;</span> parent_link_name<span class="hl opt">,</span>
+                         <span class="hl slc">// TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).</span>
+                         string<span class="hl opt">&amp;</span> child_link_name<span class="hl opt">) {</span>
+  <span class="hl slc">// Obtains the joint's name.</span>
+  <span class="hl kwb">const char</span><span class="hl opt">*</span> attr <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: joint &quot;</span>
+        <span class="hl str">&quot;tag is missing name attribute&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  name <span class="hl opt">=</span> <span class="hl kwd">string</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+
+  <span class="hl slc">// Obtains the joint's type.</span>
+  attr <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;type&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: joint &quot;</span> <span class="hl opt">+</span>
+        name <span class="hl opt">+</span> <span class="hl str">&quot; is missing type attribute&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  type <span class="hl opt">=</span> <span class="hl kwd">string</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+
+  <span class="hl slc">// Obtains the name of the joint's parent link.</span>
+  XMLElement<span class="hl opt">*</span> parent_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;parent&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>parent_node<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: joint &quot;</span> <span class="hl opt">+</span>
+        name <span class="hl opt">+</span> <span class="hl str">&quot; doesn't have a parent node!&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  attr <span class="hl opt">=</span> parent_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;link&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: joint &quot;</span> <span class="hl opt">+</span>
+        name <span class="hl opt">+</span> <span class="hl str">&quot;'s parent does not have a link attribute!&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  parent_link_name <span class="hl opt">=</span> <span class="hl kwd">string</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+
+  <span class="hl slc">// Obtains the name of the joint's child link.</span>
+  XMLElement<span class="hl opt">*</span> child_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;child&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>child_node<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: joint &quot;</span> <span class="hl opt">+</span>
+        name <span class="hl opt">+</span> <span class="hl str">&quot; doesn't have a child node&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  attr <span class="hl opt">=</span> child_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;link&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: joint &quot;</span> <span class="hl opt">+</span>
+        name <span class="hl opt">+</span> <span class="hl str">&quot;'s child does not have a link attribute&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  child_link_name <span class="hl opt">=</span> <span class="hl kwd">string</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">ParseJoint</span><span class="hl opt">(</span>RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">,</span> XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+                <span class="hl kwb">int</span> model_instance_id<span class="hl opt">) {</span>
+  <span class="hl kwb">const char</span><span class="hl opt">*</span> attr <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;drake_ignore&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>attr <span class="hl opt">&amp;&amp; (</span>std<span class="hl opt">::</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>attr<span class="hl opt">,</span> <span class="hl str">&quot;true&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">))</span> <span class="hl kwa">return</span><span class="hl opt">;</span>
+
+  <span class="hl slc">// Parses the parent and child link names.</span>
+  string name<span class="hl opt">,</span> type<span class="hl opt">,</span> parent_name<span class="hl opt">,</span> child_name<span class="hl opt">;</span>
+  <span class="hl kwd">ParseJointKeyParams</span><span class="hl opt">(</span>node<span class="hl opt">,</span> name<span class="hl opt">,</span> type<span class="hl opt">,</span> parent_name<span class="hl opt">,</span> child_name<span class="hl opt">);</span>
+
+  <span class="hl slc">// Checks if this joint connects to the world and, if so, terminates this</span>
+  <span class="hl slc">// method call. This is because joints that connect to the world are processed</span>
+  <span class="hl slc">// separately.</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>parent_name <span class="hl opt">==</span> <span class="hl kwd">string</span><span class="hl opt">(</span>RigidBodyTreeConstants<span class="hl opt">::</span>kWorldName<span class="hl opt">))</span> <span class="hl kwa">return</span><span class="hl opt">;</span>
+
+  <span class="hl kwb">int</span> parent_index <span class="hl opt">=</span> tree<span class="hl opt">-&gt;</span><span class="hl kwd">FindBodyIndex</span><span class="hl opt">(</span>parent_name<span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>parent_index <span class="hl opt">&lt;</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span>
+        <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: Could not find &quot;</span>
+        <span class="hl str">&quot;parent link named</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> parent_name <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span> <span class="hl str">with model instance ID &quot;</span> <span class="hl opt">+</span>
+        std<span class="hl opt">::</span><span class="hl kwd">to_string</span><span class="hl opt">(</span>model_instance_id<span class="hl opt">) +</span> <span class="hl str">&quot;.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">int</span> child_index <span class="hl opt">=</span> tree<span class="hl opt">-&gt;</span><span class="hl kwd">FindBodyIndex</span><span class="hl opt">(</span>child_name<span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>child_index <span class="hl opt">&lt;</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span>
+        <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: Could not find &quot;</span>
+        <span class="hl str">&quot;child link named</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> child_name <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span> <span class="hl str">with model instance ID &quot;</span> <span class="hl opt">+</span>
+        std<span class="hl opt">::</span><span class="hl kwd">to_string</span><span class="hl opt">(</span>model_instance_id<span class="hl opt">) +</span> <span class="hl str">&quot;.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  Isometry3d transform_to_parent_body <span class="hl opt">=</span> Isometry3d<span class="hl opt">::</span><span class="hl kwd">Identity</span><span class="hl opt">();</span>
+  XMLElement<span class="hl opt">*</span> origin <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;origin&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>origin<span class="hl opt">) {</span>
+    <span class="hl kwd">originAttributesToTransform</span><span class="hl opt">(</span>origin<span class="hl opt">,</span> transform_to_parent_body<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  Vector3d <span class="hl kwd">axis</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  XMLElement<span class="hl opt">*</span> axis_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;axis&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>axis_node <span class="hl opt">&amp;&amp;</span> type<span class="hl opt">.</span><span class="hl kwd">compare</span><span class="hl opt">(</span><span class="hl str">&quot;fixed&quot;</span><span class="hl opt">) !=</span> <span class="hl num">0</span> <span class="hl opt">&amp;&amp;</span>
+      type<span class="hl opt">.</span><span class="hl kwd">compare</span><span class="hl opt">(</span><span class="hl str">&quot;floating&quot;</span><span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    <span class="hl kwd">parseVectorAttribute</span><span class="hl opt">(</span>axis_node<span class="hl opt">,</span> <span class="hl str">&quot;xyz&quot;</span><span class="hl opt">,</span> axis<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>axis<span class="hl opt">.</span><span class="hl kwd">norm</span><span class="hl opt">() &lt;</span> <span class="hl num">1e-8</span><span class="hl opt">) {</span>
+      <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: axis &quot;</span>
+          <span class="hl str">&quot;is zero.  don't do that&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    axis<span class="hl opt">.</span><span class="hl kwd">normalize</span><span class="hl opt">();</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// now construct the actual joint (based on its type)</span>
+  DrakeJoint<span class="hl opt">*</span> joint <span class="hl opt">=</span> <span class="hl kwc">nullptr</span><span class="hl opt">;</span>
+
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>type<span class="hl opt">.</span><span class="hl kwd">compare</span><span class="hl opt">(</span><span class="hl str">&quot;revolute&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span> <span class="hl opt">||</span> type<span class="hl opt">.</span><span class="hl kwd">compare</span><span class="hl opt">(</span><span class="hl str">&quot;continuous&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    FixedAxisOneDoFJoint<span class="hl opt">&lt;</span>RevoluteJoint<span class="hl opt">&gt;*</span> fjoint <span class="hl opt">=</span>
+        <span class="hl kwa">new</span> <span class="hl kwd">RevoluteJoint</span><span class="hl opt">(</span>name<span class="hl opt">,</span> transform_to_parent_body<span class="hl opt">,</span> axis<span class="hl opt">);</span>
+    <span class="hl kwd">SetDynamics</span><span class="hl opt">(</span>node<span class="hl opt">,</span> fjoint<span class="hl opt">);</span>
+    <span class="hl kwd">SetLimits</span><span class="hl opt">(</span>node<span class="hl opt">,</span> fjoint<span class="hl opt">);</span>
+    joint <span class="hl opt">=</span> fjoint<span class="hl opt">;</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>type<span class="hl opt">.</span><span class="hl kwd">compare</span><span class="hl opt">(</span><span class="hl str">&quot;fixed&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    joint <span class="hl opt">=</span> <span class="hl kwa">new</span> <span class="hl kwd">FixedJoint</span><span class="hl opt">(</span>name<span class="hl opt">,</span> transform_to_parent_body<span class="hl opt">);</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>type<span class="hl opt">.</span><span class="hl kwd">compare</span><span class="hl opt">(</span><span class="hl str">&quot;prismatic&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    FixedAxisOneDoFJoint<span class="hl opt">&lt;</span>PrismaticJoint<span class="hl opt">&gt;*</span> fjoint <span class="hl opt">=</span>
+        <span class="hl kwa">new</span> <span class="hl kwd">PrismaticJoint</span><span class="hl opt">(</span>name<span class="hl opt">,</span> transform_to_parent_body<span class="hl opt">,</span> axis<span class="hl opt">);</span>
+    <span class="hl kwd">SetDynamics</span><span class="hl opt">(</span>node<span class="hl opt">,</span> fjoint<span class="hl opt">);</span>
+    <span class="hl kwd">SetLimits</span><span class="hl opt">(</span>node<span class="hl opt">,</span> fjoint<span class="hl opt">);</span>
+    joint <span class="hl opt">=</span> fjoint<span class="hl opt">;</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>type<span class="hl opt">.</span><span class="hl kwd">compare</span><span class="hl opt">(</span><span class="hl str">&quot;floating&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    joint <span class="hl opt">=</span> <span class="hl kwa">new</span> <span class="hl kwd">RollPitchYawFloatingJoint</span><span class="hl opt">(</span>name<span class="hl opt">,</span> transform_to_parent_body<span class="hl opt">);</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+        <span class="hl str">&quot;Unrecognized joint type: &quot;</span> <span class="hl opt">+</span> type<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  unique_ptr<span class="hl opt">&lt;</span>DrakeJoint<span class="hl opt">&gt;</span> <span class="hl kwd">joint_unique_ptr</span><span class="hl opt">(</span>joint<span class="hl opt">);</span>
+  tree<span class="hl opt">-&gt;</span>bodies<span class="hl opt">[</span>child_index<span class="hl opt">]-&gt;</span><span class="hl kwd">setJoint</span><span class="hl opt">(</span><span class="hl kwd">move</span><span class="hl opt">(</span>joint_unique_ptr<span class="hl opt">));</span>
+  tree<span class="hl opt">-&gt;</span>bodies<span class="hl opt">[</span>child_index<span class="hl opt">]-&gt;</span><span class="hl kwd">set_parent</span><span class="hl opt">(</span>tree<span class="hl opt">-&gt;</span>bodies<span class="hl opt">[</span>parent_index<span class="hl opt">].</span><span class="hl kwd">get</span><span class="hl opt">());</span>
+<span class="hl opt">}</span>
+
+<span class="hl com">/* Searches through the URDF document looking for the effort limits of a joint</span>
+<span class="hl com"> * named &#64;p joint_name. If the joint is not found, throws an</span>
+<span class="hl com"> * `std::runtime_error` exception. If the limits of the joint are not specified,</span>
+<span class="hl com"> * this method does nothing. If the effort limits are specified, this method</span>
+<span class="hl com"> * saves them in \p min_effort and \p max_effort.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;param[in] robot_node The XML node for the robot description. This must</span>
+<span class="hl com"> * contain child joint elements through which to search.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;param[in] joint_name The name of the joint to find. If no joint with such a</span>
+<span class="hl com"> * name exists, throw an exception.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;param[out] min_effort A pointer to where the minimum effort should be saved.</span>
+<span class="hl com"> * If the effort limits are not specified, this value is not modified.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;param[out] max_effort A pointer to where the minimum effort should be saved.</span>
+<span class="hl com"> * If the effort limits are not specified, this value is not modified.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;throws std::runtime_error if the name of the actuator's joint cannot be</span>
+<span class="hl com"> * determined or if the named joint could not be found.</span>
+<span class="hl com"> */</span>
+<span class="hl kwb">void</span> <span class="hl kwd">GetActuatorEffortLimit</span><span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> robot_node<span class="hl opt">,</span> <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> joint_name<span class="hl opt">,</span>
+                            <span class="hl kwb">double</span><span class="hl opt">*</span> min_effort<span class="hl opt">,</span> <span class="hl kwb">double</span><span class="hl opt">*</span> max_effort<span class="hl opt">) {</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> joint_node <span class="hl opt">=</span> robot_node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;joint&quot;</span><span class="hl opt">);</span>
+       joint_node<span class="hl opt">;</span> joint_node <span class="hl opt">=</span> joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;joint&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl slc">// Checks for the existence of an attribute named &quot;drake_ignore&quot;. If such an</span>
+    <span class="hl slc">// attribute exists and has a value of &quot;true&quot;, ignores the current joint.</span>
+    <span class="hl opt">{</span>
+      <span class="hl kwb">const char</span><span class="hl opt">*</span> attr <span class="hl opt">=</span> joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;drake_ignore&quot;</span><span class="hl opt">);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>attr <span class="hl opt">&amp;&amp; (</span>std<span class="hl opt">::</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>attr<span class="hl opt">,</span> <span class="hl str">&quot;true&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">)) {</span>
+        <span class="hl kwa">continue</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// Obtains the joint's name.</span>
+    <span class="hl kwb">const char</span><span class="hl opt">*</span> attr <span class="hl opt">=</span> joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+      <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+          <span class="hl str">&quot;Joint tag is missing name attribute.&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    string name <span class="hl opt">=</span> <span class="hl kwd">string</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+
+    <span class="hl slc">// Checks if the current joint's name matches parameter joint_name.</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>name <span class="hl opt">==</span> joint_name<span class="hl opt">) {</span>
+      <span class="hl slc">// Parses the minimum and maximum effort limits.</span>
+      XMLElement<span class="hl opt">*</span> limit_node <span class="hl opt">=</span> joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;limit&quot;</span><span class="hl opt">);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>limit_node<span class="hl opt">) {</span>
+        <span class="hl slc">// Parses attribute &quot;effort&quot; if it exists.</span>
+        <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>limit_node<span class="hl opt">,</span> <span class="hl str">&quot;effort&quot;</span><span class="hl opt">, *</span>max_effort<span class="hl opt">);</span>
+        <span class="hl opt">(*</span>min_effort<span class="hl opt">) = -(*</span>max_effort<span class="hl opt">);</span>
+
+        <span class="hl slc">// Attribute effort_min and effort_max take precedence over attribute</span>
+        <span class="hl slc">// effort if they exist.</span>
+        <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>limit_node<span class="hl opt">,</span> <span class="hl str">&quot;effort_min&quot;</span><span class="hl opt">, *</span>min_effort<span class="hl opt">);</span>
+        <span class="hl kwd">parseScalarAttribute</span><span class="hl opt">(</span>limit_node<span class="hl opt">,</span> <span class="hl str">&quot;effort_max&quot;</span><span class="hl opt">, *</span>max_effort<span class="hl opt">);</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl slc">// Terminates this method call since the joint was found.</span>
+      <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// If this point in the code is reached, that means no joint named</span>
+  <span class="hl slc">// joint_name was found in the URDF. Therefore throw an exception.</span>
+  <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+      <span class="hl str">&quot;Unable to find joint</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> joint_name <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span><span class="hl str">.&quot;</span><span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">ParseTransmission</span><span class="hl opt">(</span>RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">,</span>
+                       XMLElement<span class="hl opt">*</span> transmission_node<span class="hl opt">,</span> <span class="hl kwb">int</span> model_instance_id<span class="hl opt">) {</span>
+  <span class="hl slc">// Determines the transmission type.</span>
+  <span class="hl kwb">const char</span><span class="hl opt">*</span> attr <span class="hl opt">=</span> <span class="hl kwc">nullptr</span><span class="hl opt">;</span>
+  XMLElement<span class="hl opt">*</span> type_node <span class="hl opt">=</span> transmission_node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;type&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>type_node<span class="hl opt">) {</span>
+    attr <span class="hl opt">=</span> type_node<span class="hl opt">-&gt;</span><span class="hl kwd">GetText</span><span class="hl opt">();</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+    <span class="hl slc">// Old URDF format, kept for convenience</span>
+    attr <span class="hl opt">=</span> transmission_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;type&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span>attr<span class="hl opt">) {</span>
+      <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">logic_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+          <span class="hl str">&quot;Transmission element is missing the type child.&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+  string <span class="hl kwd">type</span><span class="hl opt">(</span>attr<span class="hl opt">);</span>
+
+  <span class="hl slc">// Checks if the transmission type is not SimpleTransmission. If it is not,</span>
+  <span class="hl slc">// print a warning and then abort this method call since only simple</span>
+  <span class="hl slc">// transmissions are supported at this time.</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>type<span class="hl opt">.</span><span class="hl kwd">find</span><span class="hl opt">(</span><span class="hl str">&quot;SimpleTransmission&quot;</span><span class="hl opt">) ==</span> string<span class="hl opt">::</span>npos<span class="hl opt">) {</span>
+    cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: WARNING: Only &quot;</span>
+        <span class="hl str">&quot;SimpleTransmissions are supported right now.  This element will be &quot;</span>
+        <span class="hl str">&quot;skipped.&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+    <span class="hl kwa">return</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Determines the actuator's name.</span>
+  XMLElement<span class="hl opt">*</span> actuator_node <span class="hl opt">=</span> transmission_node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;actuator&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>actuator_node <span class="hl opt">|| !</span>actuator_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">logic_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+        <span class="hl str">&quot;Transmission is missing an actuator element.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  string <span class="hl kwd">actuator_name</span><span class="hl opt">(</span>actuator_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">));</span>
+
+  <span class="hl slc">// Determines the name of the joint to which the actuator is attached.</span>
+  XMLElement<span class="hl opt">*</span> joint_node <span class="hl opt">=</span> transmission_node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;joint&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>joint_node <span class="hl opt">|| !</span>joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">logic_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+        <span class="hl str">&quot;Transmission is missing a joint element.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  string <span class="hl kwd">joint_name</span><span class="hl opt">(</span>joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">));</span>
+
+  <span class="hl slc">// Checks if the actuator is attached to a fixed joint. If so, abort this</span>
+  <span class="hl slc">// method call.</span>
+  <span class="hl kwb">int</span> body_index <span class="hl opt">=</span>
+      tree<span class="hl opt">-&gt;</span><span class="hl kwd">FindIndexOfChildBodyOfJoint</span><span class="hl opt">(</span>joint_name<span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>tree<span class="hl opt">-&gt;</span>bodies<span class="hl opt">[</span>body_index<span class="hl opt">]-&gt;</span><span class="hl kwd">getJoint</span><span class="hl opt">().</span><span class="hl kwd">get_num_positions</span><span class="hl opt">() ==</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    cerr <span class="hl opt">&lt;&lt;</span> <span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: WARNING: Skipping &quot;</span>
+         <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;transmission since it's attached to a fixed joint</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span>
+         <span class="hl opt">&lt;&lt;</span> joint_name <span class="hl opt">&lt;&lt;</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span><span class="hl str">.&quot;</span> <span class="hl opt">&lt;&lt;</span> endl<span class="hl opt">;</span>
+    <span class="hl kwa">return</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Obtains the actuator's gain.</span>
+  XMLElement<span class="hl opt">*</span> reduction_node <span class="hl opt">=</span>
+      transmission_node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;mechanicalReduction&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwb">double</span> gain <span class="hl opt">=</span> <span class="hl num">1.0</span><span class="hl opt">;</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>reduction_node<span class="hl opt">)</span> <span class="hl kwd">parseScalarValue</span><span class="hl opt">(</span>reduction_node<span class="hl opt">,</span> gain<span class="hl opt">);</span>
+
+  <span class="hl slc">// Obtains the min and max effort from the joint.</span>
+  <span class="hl kwb">double</span> effort_max <span class="hl opt">=</span> numeric_limits<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;::</span><span class="hl kwd">infinity</span><span class="hl opt">();</span>
+  <span class="hl kwb">double</span> effort_min <span class="hl opt">= -</span>numeric_limits<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;::</span><span class="hl kwd">infinity</span><span class="hl opt">();</span>
+
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> element <span class="hl opt">=</span>
+          <span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span>XMLElement<span class="hl opt">*&gt;(</span>transmission_node<span class="hl opt">-&gt;</span><span class="hl kwd">Parent</span><span class="hl opt">())) {</span>
+    <span class="hl kwd">GetActuatorEffortLimit</span><span class="hl opt">(</span>element<span class="hl opt">,</span> joint_name<span class="hl opt">, &amp;</span>effort_min<span class="hl opt">, &amp;</span>effort_max<span class="hl opt">);</span>
+  <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+    <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">logic_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+        <span class="hl str">&quot;Expected a &lt;robot&gt; element as a parent of a &lt;transmission&gt; element &quot;</span>
+        <span class="hl str">&quot;for actuator</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> actuator_name <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span> <span class="hl str">and joint</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> joint_name <span class="hl opt">+</span>
+        <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span><span class="hl str">.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Creates the actuator and adds it to the rigid body tree.</span>
+  tree<span class="hl opt">-&gt;</span>actuators<span class="hl opt">.</span><span class="hl kwd">push_back</span><span class="hl opt">(</span><span class="hl kwd">RigidBodyActuator</span><span class="hl opt">(</span>actuator_name<span class="hl opt">,</span>
+                                              tree<span class="hl opt">-&gt;</span>bodies<span class="hl opt">[</span>body_index<span class="hl opt">].</span><span class="hl kwd">get</span><span class="hl opt">(),</span>
+                                              gain<span class="hl opt">,</span> effort_min<span class="hl opt">,</span> effort_max<span class="hl opt">));</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">ParseLoop</span><span class="hl opt">(</span>RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">,</span> XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+               <span class="hl kwb">int</span> model_instance_id<span class="hl opt">) {</span>
+  Vector3d <span class="hl kwd">axis</span><span class="hl opt">(</span><span class="hl num">1.0</span><span class="hl opt">,</span> <span class="hl num">0.0</span><span class="hl opt">,</span> <span class="hl num">0.0</span><span class="hl opt">);</span>
+
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>node <span class="hl opt">|| !</span>node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: loop is &quot;</span>
+        <span class="hl str">&quot;missing a name element&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  string <span class="hl kwd">name</span><span class="hl opt">(</span>node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">));</span>
+
+  XMLElement<span class="hl opt">*</span> link_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;link1&quot;</span><span class="hl opt">);</span>
+  std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> frameA <span class="hl opt">=</span>
+      <span class="hl kwd">MakeRigidBodyFrameFromUrdfNode</span><span class="hl opt">(</span>
+          <span class="hl opt">*</span>tree<span class="hl opt">, *</span>link_node<span class="hl opt">,</span> link_node<span class="hl opt">,</span> name <span class="hl opt">+</span> <span class="hl str">&quot;FrameA&quot;</span><span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+
+  link_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;link2&quot;</span><span class="hl opt">);</span>
+  std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> frameB <span class="hl opt">=</span>
+      <span class="hl kwd">MakeRigidBodyFrameFromUrdfNode</span><span class="hl opt">(</span>
+          <span class="hl opt">*</span>tree<span class="hl opt">, *</span>link_node<span class="hl opt">,</span> link_node<span class="hl opt">,</span> name <span class="hl opt">+</span> <span class="hl str">&quot;FrameB&quot;</span><span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+
+  XMLElement<span class="hl opt">*</span> axis_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;axis&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>axis_node <span class="hl opt">&amp;&amp; !</span><span class="hl kwd">parseVectorAttribute</span><span class="hl opt">(</span>axis_node<span class="hl opt">,</span> <span class="hl str">&quot;xyz&quot;</span><span class="hl opt">,</span> axis<span class="hl opt">)) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR parsing &quot;</span>
+        <span class="hl str">&quot;loop joint axis.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  tree<span class="hl opt">-&gt;</span><span class="hl kwd">addFrame</span><span class="hl opt">(</span>frameA<span class="hl opt">);</span>
+  tree<span class="hl opt">-&gt;</span><span class="hl kwd">addFrame</span><span class="hl opt">(</span>frameB<span class="hl opt">);</span>
+  RigidBodyLoop<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;</span> <span class="hl kwd">l</span><span class="hl opt">(</span>frameA<span class="hl opt">,</span> frameB<span class="hl opt">,</span> axis<span class="hl opt">);</span>
+  tree<span class="hl opt">-&gt;</span>loops<span class="hl opt">.</span><span class="hl kwd">push_back</span><span class="hl opt">(</span>l<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">ParseFrame</span><span class="hl opt">(</span>RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">,</span> XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+                <span class="hl kwb">int</span> model_instance_id<span class="hl opt">) {</span>
+  <span class="hl kwb">const char</span><span class="hl opt">*</span> frame_name <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>frame_name<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR parsing &quot;</span>
+        <span class="hl str">&quot;Drake frame name.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> frame <span class="hl opt">=</span>
+      <span class="hl kwd">MakeRigidBodyFrameFromUrdfNode</span><span class="hl opt">(</span>
+          <span class="hl opt">*</span>tree<span class="hl opt">, *</span>node<span class="hl opt">,</span> node<span class="hl opt">,</span> frame_name<span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+  tree<span class="hl opt">-&gt;</span><span class="hl kwd">addFrame</span><span class="hl opt">(</span>frame<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl com">/* Searches for a joint that connects the URDF model to a body called</span>
+<span class="hl com"> * RigidBodyTree::kWorldName. If it finds such a joint, it updates</span>
+<span class="hl com"> * &#64;p weld_to_frame with the offset specified by the joint.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * An exception is thrown if no such joint is found, or if multiple</span>
+<span class="hl com"> * world-connecting joints are found.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * Multiple world-connecting joints cannot exist in a single URDF file because</span>
+<span class="hl com"> * each URDF file describes one model using a tree of bodies connected by</span>
+<span class="hl com"> * joints. Thus, the only way for a URDF to contain multiple world-connecting</span>
+<span class="hl com"> * joints is if the URDF describes more than one model. This is a violation of</span>
+<span class="hl com"> * the one-model-per-URDF rule.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;param[in] node A pointer to the XML node that is parsing the URDF model.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;param[out] floating_base_type A reference to where the floating_base_type</span>
+<span class="hl com"> * should be saved.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * &#64;param[out] weld_to_frame The parameter to modify. If this parameter is</span>
+<span class="hl com"> * `nullptr`, a new `RigidBodyFrame` is constructed and stored in the shared</span>
+<span class="hl com"> * pointer.</span>
+<span class="hl com"> */</span>
+<span class="hl kwb">void</span> <span class="hl kwd">ParseWorldJoint</span><span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+                     <span class="hl slc">// TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).</span>
+                     FloatingBaseType<span class="hl opt">&amp;</span> floating_base_type<span class="hl opt">,</span>
+                     <span class="hl slc">// TODO(#2274) Fix NOLINTNEXTLINE(runtime/references).</span>
+                     std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;&amp;</span> weld_to_frame<span class="hl opt">) {</span>
+  <span class="hl kwb">bool</span> found_world_joint <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> joint_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;joint&quot;</span><span class="hl opt">);</span> joint_node<span class="hl opt">;</span>
+       joint_node <span class="hl opt">=</span> joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;joint&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwb">const char</span><span class="hl opt">*</span> attr <span class="hl opt">=</span> joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;drake_ignore&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>attr <span class="hl opt">&amp;&amp; (</span>std<span class="hl opt">::</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>attr<span class="hl opt">,</span> <span class="hl str">&quot;true&quot;</span><span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">))</span> <span class="hl kwa">continue</span><span class="hl opt">;</span>
+
+    <span class="hl slc">// Parses the names of the joint, joint type, parent link, and child link.</span>
+    string joint_name<span class="hl opt">,</span> joint_type<span class="hl opt">,</span> parent_name<span class="hl opt">,</span> child_name<span class="hl opt">;</span>
+    <span class="hl kwd">ParseJointKeyParams</span><span class="hl opt">(</span>joint_node<span class="hl opt">,</span> joint_name<span class="hl opt">,</span> joint_type<span class="hl opt">,</span> parent_name<span class="hl opt">,</span>
+                        child_name<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>parent_name <span class="hl opt">==</span> <span class="hl kwd">string</span><span class="hl opt">(</span>RigidBodyTreeConstants<span class="hl opt">::</span>kWorldName<span class="hl opt">)) {</span>
+      <span class="hl slc">// Ensures only one joint connects the model to the world.</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>found_world_joint<span class="hl opt">) {</span>
+        <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+            <span class="hl str">&quot;Model contains multiple joints that connect to world!&quot;</span><span class="hl opt">);</span>
+      <span class="hl opt">}</span>
+      found_world_joint <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+
+      <span class="hl slc">// The world-connecting joint was found. The following code updates the</span>
+      <span class="hl slc">// weld_to_frame parameter based on the joint's offset, and the</span>
+      <span class="hl slc">// floating_base_type parameter based on the joint's type.</span>
+      Isometry3d transform_to_parent_body <span class="hl opt">=</span> Isometry3d<span class="hl opt">::</span><span class="hl kwd">Identity</span><span class="hl opt">();</span>
+      XMLElement<span class="hl opt">*</span> origin <span class="hl opt">=</span> joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;origin&quot;</span><span class="hl opt">);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>origin<span class="hl opt">) {</span>
+        <span class="hl kwd">originAttributesToTransform</span><span class="hl opt">(</span>origin<span class="hl opt">,</span> transform_to_parent_body<span class="hl opt">);</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl slc">// Creates a new rigid body frame if the weld_to_frame parameter contains</span>
+      <span class="hl slc">// a nullptr.</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>weld_to_frame <span class="hl opt">==</span> <span class="hl kwc">nullptr</span><span class="hl opt">)</span>
+        weld_to_frame<span class="hl opt">.</span><span class="hl kwd">reset</span><span class="hl opt">(</span><span class="hl kwa">new</span> RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;());</span>
+
+      weld_to_frame<span class="hl opt">-&gt;</span><span class="hl kwd">set_name</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>RigidBodyTreeConstants<span class="hl opt">::</span>kWorldName<span class="hl opt">));</span>
+      weld_to_frame<span class="hl opt">-&gt;</span><span class="hl kwd">set_transform_to_body</span><span class="hl opt">(</span>
+          weld_to_frame<span class="hl opt">-&gt;</span><span class="hl kwd">get_transform_to_body</span><span class="hl opt">() *</span> transform_to_parent_body<span class="hl opt">);</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>joint_type <span class="hl opt">==</span> <span class="hl str">&quot;fixed&quot;</span><span class="hl opt">) {</span>
+        floating_base_type <span class="hl opt">=</span> FloatingBaseType<span class="hl opt">::</span>kFixed<span class="hl opt">;</span>
+      <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>joint_type <span class="hl opt">==</span> <span class="hl str">&quot;continuous&quot;</span><span class="hl opt">) {</span>
+        floating_base_type <span class="hl opt">=</span> FloatingBaseType<span class="hl opt">::</span>kQuaternion<span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl slc">// Throws an exception if the joint connecting the model to the world</span>
+      <span class="hl slc">// includes an axis specification. This is a very strange situation that</span>
+      <span class="hl slc">// may not be physically possible in the real world.</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;axis&quot;</span><span class="hl opt">)) {</span>
+        <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+            <span class="hl str">&quot;Drake's URDF parser does not support an axis specification for &quot;</span>
+            <span class="hl str">&quot;the joint that connects the model to the world.&quot;</span><span class="hl opt">);</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable <span class="hl kwd">ParseModel</span><span class="hl opt">(</span>RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">,</span> XMLElement<span class="hl opt">*</span> node<span class="hl opt">,</span>
+                                <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+                                <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> root_dir<span class="hl opt">,</span>
+                                <span class="hl kwb">const</span> FloatingBaseType floating_base_type<span class="hl opt">,</span>
+                                std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span>
+                                    weld_to_frame<span class="hl opt">) {</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: Your &quot;</span>
+        <span class="hl str">&quot;robot must have a name attribute.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Obtains the model name and, if model_instance_table exists, ensures no such</span>
+  <span class="hl slc">// model exists in the model_instance_id_table. Throws an exception if a model</span>
+  <span class="hl slc">// of the same name already exists in the table.</span>
+  string model_name <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">);</span>
+
+  <span class="hl slc">// Instantiates a ModelInstanceIdTable.</span>
+  ModelInstanceIdTable model_instance_id_table<span class="hl opt">;</span>
+
+  <span class="hl slc">// Obtains and adds a new model instance ID into the table.</span>
+  <span class="hl kwb">int</span> model_instance_id <span class="hl opt">=</span> tree<span class="hl opt">-&gt;</span><span class="hl kwd">add_model_instance</span><span class="hl opt">();</span>
+  model_instance_id_table<span class="hl opt">[</span>model_name<span class="hl opt">] =</span> model_instance_id<span class="hl opt">;</span>
+
+  <span class="hl slc">// Parses the model's material elements. Throws an exception if there's a</span>
+  <span class="hl slc">// material name clash regardless of whether the associated RGBA values are</span>
+  <span class="hl slc">// the same.</span>
+  MaterialMap materials<span class="hl opt">;</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> material_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;material&quot;</span><span class="hl opt">);</span>
+       material_node<span class="hl opt">;</span>
+       material_node <span class="hl opt">=</span> material_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;material&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwd">ParseMaterial</span><span class="hl opt">(</span>material_node<span class="hl opt">,</span> materials<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Makes a copy of parameter floating_base_type. This is necessary since the</span>
+  <span class="hl slc">// actual type may be specified by the URDF itself when the URDF contains a</span>
+  <span class="hl slc">// world link and a joint connecting to the world link. By default,</span>
+  <span class="hl slc">// actual_floating_base_type equals parameter floating_base_type.</span>
+  FloatingBaseType actual_floating_base_type <span class="hl opt">=</span> floating_base_type<span class="hl opt">;</span>
+
+  <span class="hl slc">// Maintains a list of links that were added to the rigid body tree.</span>
+  <span class="hl slc">// This is iterated over by AddFloatingJoint() to determine where to attach</span>
+  <span class="hl slc">// floating joints.</span>
+  std<span class="hl opt">::</span>vector<span class="hl opt">&lt;</span><span class="hl kwb">int</span><span class="hl opt">&gt;</span> link_indices<span class="hl opt">;</span>
+
+  <span class="hl slc">// Parses the model's link elements.</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> link_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;link&quot;</span><span class="hl opt">);</span> link_node<span class="hl opt">;</span>
+       link_node <span class="hl opt">=</span> link_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;link&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwb">int</span> index<span class="hl opt">;</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">ParseBody</span><span class="hl opt">(</span>tree<span class="hl opt">,</span> model_name<span class="hl opt">,</span> link_node<span class="hl opt">, &amp;</span>materials<span class="hl opt">,</span> package_map<span class="hl opt">,</span>
+                  root_dir<span class="hl opt">,</span> model_instance_id<span class="hl opt">, &amp;</span>index<span class="hl opt">)) {</span>
+      link_indices<span class="hl opt">.</span><span class="hl kwd">push_back</span><span class="hl opt">(</span>index<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      <span class="hl slc">// Determines whether the link was not parsed because it is a world link.</span>
+      <span class="hl kwb">const char</span><span class="hl opt">*</span> name_attr <span class="hl opt">=</span> link_node<span class="hl opt">-&gt;</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;name&quot;</span><span class="hl opt">);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(!</span>name_attr<span class="hl opt">) {</span>
+        <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+          <span class="hl str">&quot;link tag is missing name attribute&quot;</span><span class="hl opt">);</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>name_attr<span class="hl opt">) ==</span> <span class="hl kwd">string</span><span class="hl opt">(</span>RigidBodyTreeConstants<span class="hl opt">::</span>kWorldName<span class="hl opt">)) {</span>
+        <span class="hl slc">// Since a world link was specified within the URDF, there must be</span>
+        <span class="hl slc">// a  joint that connects the world to the robot's root node. The</span>
+        <span class="hl slc">// following method parses the information contained within this</span>
+        <span class="hl slc">// joint. The weld_to_frame transform, if not a nullptr, is updated</span>
+        <span class="hl slc">// with the transform specified by this joint. If it is a nullptr,</span>
+        <span class="hl slc">// a shared_ptr&lt;RigidBodyFrame&gt; is created and initialized to this</span>
+        <span class="hl slc">// transform.</span>
+        <span class="hl kwd">ParseWorldJoint</span><span class="hl opt">(</span>node<span class="hl opt">,</span> actual_floating_base_type<span class="hl opt">,</span> weld_to_frame<span class="hl opt">);</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// DEBUG</span>
+  <span class="hl slc">// else {</span>
+  <span class="hl slc">// cout &lt;&lt; &quot;Parsed link&quot; &lt;&lt; endl;</span>
+  <span class="hl slc">// cout &lt;&lt; &quot;model-&gt;bodies.size() = &quot; &lt;&lt; model-&gt;bodies.size() &lt;&lt; endl;</span>
+  <span class="hl slc">// cout &lt;&lt; &quot;model-&gt;num_bodies = &quot; &lt;&lt; model-&gt;num_bodies &lt;&lt; endl;</span>
+  <span class="hl slc">//}</span>
+  <span class="hl slc">// END_DEBUG</span>
+
+  <span class="hl slc">// Parses the collision filter groups.</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> group_node <span class="hl opt">=</span>
+           node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;collision_filter_group&quot;</span><span class="hl opt">);</span>
+       group_node<span class="hl opt">;</span>
+       group_node <span class="hl opt">=</span> group_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;collision_filter_group&quot;</span><span class="hl opt">)) {</span>
+    <span class="hl kwd">ParseCollisionFilterGroup</span><span class="hl opt">(</span>tree<span class="hl opt">,</span> group_node<span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Parses the model's joint elements.</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> joint_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;joint&quot;</span><span class="hl opt">);</span> joint_node<span class="hl opt">;</span>
+       joint_node <span class="hl opt">=</span> joint_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;joint&quot;</span><span class="hl opt">))</span>
+    <span class="hl kwd">ParseJoint</span><span class="hl opt">(</span>tree<span class="hl opt">,</span> joint_node<span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+
+  <span class="hl slc">// Parses the model's transmission elements.</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> transmission_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;transmission&quot;</span><span class="hl opt">);</span>
+       transmission_node<span class="hl opt">;</span>
+       transmission_node <span class="hl opt">=</span>
+           transmission_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;transmission&quot;</span><span class="hl opt">))</span>
+    <span class="hl kwd">ParseTransmission</span><span class="hl opt">(</span>tree<span class="hl opt">,</span> transmission_node<span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+
+  <span class="hl slc">// Parses the model's loop joint elements.</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> loop_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;loop_joint&quot;</span><span class="hl opt">);</span> loop_node<span class="hl opt">;</span>
+       loop_node <span class="hl opt">=</span> loop_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;loop_joint&quot;</span><span class="hl opt">))</span>
+    <span class="hl kwd">ParseLoop</span><span class="hl opt">(</span>tree<span class="hl opt">,</span> loop_node<span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+
+  <span class="hl slc">// Parses the model's Drake frame elements.</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>XMLElement<span class="hl opt">*</span> frame_node <span class="hl opt">=</span> node<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;frame&quot;</span><span class="hl opt">);</span> frame_node<span class="hl opt">;</span>
+       frame_node <span class="hl opt">=</span> frame_node<span class="hl opt">-&gt;</span><span class="hl kwd">NextSiblingElement</span><span class="hl opt">(</span><span class="hl str">&quot;frame&quot;</span><span class="hl opt">))</span>
+    <span class="hl kwd">ParseFrame</span><span class="hl opt">(</span>tree<span class="hl opt">,</span> frame_node<span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+
+  <span class="hl slc">// Adds the floating joint(s) that connect the newly added robot model to the</span>
+  <span class="hl slc">// rest of the rigid body tree.</span>
+  <span class="hl kwd">AddFloatingJoint</span><span class="hl opt">(</span>actual_floating_base_type<span class="hl opt">,</span> link_indices<span class="hl opt">,</span> weld_to_frame<span class="hl opt">,</span>
+                   <span class="hl kwc">nullptr</span> <span class="hl com">/* pose_map */</span><span class="hl opt">,</span> tree<span class="hl opt">);</span>
+
+  <span class="hl kwa">return</span> model_instance_id_table<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable <span class="hl kwd">ParseUrdf</span><span class="hl opt">(</span>XMLDocument<span class="hl opt">*</span> xml_doc<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span> <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> root_dir<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> FloatingBaseType floating_base_type<span class="hl opt">,</span>
+    std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> weld_to_frame<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  XMLElement<span class="hl opt">*</span> node <span class="hl opt">=</span> xml_doc<span class="hl opt">-&gt;</span><span class="hl kwd">FirstChildElement</span><span class="hl opt">(</span><span class="hl str">&quot;robot&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span>node<span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+        <span class="hl str">&quot;URDF does not contain a robot tag.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  ModelInstanceIdTable model_instance_id_table <span class="hl opt">=</span> <span class="hl kwd">ParseModel</span><span class="hl opt">(</span>
+      tree<span class="hl opt">,</span> node<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">,</span> floating_base_type<span class="hl opt">,</span> weld_to_frame<span class="hl opt">);</span>
+
+  tree<span class="hl opt">-&gt;</span><span class="hl kwd">compile</span><span class="hl opt">();</span>
+
+  <span class="hl kwa">return</span> model_instance_id_table<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl opt">}</span>  <span class="hl slc">// namespace</span>
+
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfStringWithRpyJointToWorld</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> urdf_string<span class="hl opt">,</span> RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwb">const</span> PackageMap package_map<span class="hl opt">;</span>
+  <span class="hl kwa">return</span>
+      <span class="hl kwd">AddModelInstanceFromUrdfStringWithRpyJointToWorldSearchingInRosPackages</span><span class="hl opt">(</span>
+          urdf_string<span class="hl opt">,</span> package_map<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl slc">// TODO(liang.fok) Remove this deprecated method prior to Release 1.0.</span>
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfString</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> urdf_string<span class="hl opt">,</span> RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfStringWithRpyJointToWorld</span><span class="hl opt">(</span>urdf_string<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable
+<span class="hl kwd">AddModelInstanceFromUrdfStringWithRpyJointToWorldSearchingInRosPackages</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> urdf_string<span class="hl opt">,</span> <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwb">const</span> string root_dir <span class="hl opt">=</span> <span class="hl str">&quot;.&quot;</span><span class="hl opt">;</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfStringSearchingInRosPackages</span><span class="hl opt">(</span>
+      urdf_string<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">,</span> kRollPitchYaw<span class="hl opt">,</span>
+      <span class="hl kwc">nullptr</span> <span class="hl com">/* weld_to_frame */</span><span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl slc">// TODO(liang.fok) Remove this deprecated method prior to Release 1.0.</span>
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfString</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> urdf_string<span class="hl opt">,</span> <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwa">return</span>
+      <span class="hl kwd">AddModelInstanceFromUrdfStringWithRpyJointToWorldSearchingInRosPackages</span><span class="hl opt">(</span>
+          urdf_string<span class="hl opt">,</span> package_map<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfString</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> urdf_string<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> root_dir<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> drake<span class="hl opt">::</span>multibody<span class="hl opt">::</span>joints<span class="hl opt">::</span>FloatingBaseType floating_base_type<span class="hl opt">,</span>
+    std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> weld_to_frame<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfStringSearchingInRosPackages</span><span class="hl opt">(</span>
+      urdf_string<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">,</span> floating_base_type<span class="hl opt">,</span>
+      weld_to_frame<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfString</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> urdf_string<span class="hl opt">,</span> <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> root_dir<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> FloatingBaseType floating_base_type<span class="hl opt">,</span>
+    std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> weld_to_frame<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwb">const</span> PackageMap package_map<span class="hl opt">;</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfStringSearchingInRosPackages</span><span class="hl opt">(</span>
+      urdf_string<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">,</span> floating_base_type<span class="hl opt">,</span>
+      weld_to_frame<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfStringSearchingInRosPackages</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> urdf_string<span class="hl opt">,</span> <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> root_dir<span class="hl opt">,</span> <span class="hl kwb">const</span> FloatingBaseType floating_base_type<span class="hl opt">,</span>
+    std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> weld_to_frame<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  XMLDocument xml_doc<span class="hl opt">;</span>
+  xml_doc<span class="hl opt">.</span><span class="hl kwd">Parse</span><span class="hl opt">(</span>urdf_string<span class="hl opt">.</span><span class="hl kwd">c_str</span><span class="hl opt">());</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">ParseUrdf</span><span class="hl opt">(&amp;</span>xml_doc<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">,</span> floating_base_type<span class="hl opt">,</span>
+                   weld_to_frame<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfFileWithRpyJointToWorld</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> filename<span class="hl opt">,</span> RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwd">DRAKE_DEMAND</span><span class="hl opt">(</span>tree <span class="hl opt">&amp;&amp;</span> <span class="hl str">&quot;You must provide a valid RigidBodyTree pointer.&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwb">const</span> string full_path_filename <span class="hl opt">=</span> <span class="hl kwd">GetFullPath</span><span class="hl opt">(</span>filename<span class="hl opt">);</span>
+  PackageMap package_map<span class="hl opt">;</span>
+  package_map<span class="hl opt">.</span><span class="hl kwd">PopulateUpstreamToDrake</span><span class="hl opt">(</span>full_path_filename<span class="hl opt">);</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfFileSearchingInRosPackages</span><span class="hl opt">(</span>
+      full_path_filename<span class="hl opt">,</span> package_map<span class="hl opt">,</span> kRollPitchYaw<span class="hl opt">,</span>
+      <span class="hl kwc">nullptr</span> <span class="hl com">/* weld_to_frame */</span><span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl slc">// TODO(liang.fok) Remove this deprecated method prior to Release 1.0.</span>
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfFile</span><span class="hl opt">(</span><span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> filename<span class="hl opt">,</span>
+                                                  RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfFileWithRpyJointToWorld</span><span class="hl opt">(</span>filename<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfFileToWorld</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> filename<span class="hl opt">,</span> <span class="hl kwb">const</span> FloatingBaseType floating_base_type<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwd">DRAKE_DEMAND</span><span class="hl opt">(</span>tree <span class="hl opt">&amp;&amp;</span> <span class="hl str">&quot;You must provide a valid RigidBodyTree pointer.&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwb">const</span> string full_path_filename <span class="hl opt">=</span> <span class="hl kwd">GetFullPath</span><span class="hl opt">(</span>filename<span class="hl opt">);</span>
+  PackageMap package_map<span class="hl opt">;</span>
+  package_map<span class="hl opt">.</span><span class="hl kwd">PopulateUpstreamToDrake</span><span class="hl opt">(</span>full_path_filename<span class="hl opt">);</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfFileSearchingInRosPackages</span><span class="hl opt">(</span>
+      full_path_filename<span class="hl opt">,</span> package_map<span class="hl opt">,</span> floating_base_type<span class="hl opt">,</span>
+      <span class="hl kwc">nullptr</span> <span class="hl com">/*weld_to_frame*/</span><span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl slc">// TODO(liang.fok) Remove this deprecated method prior to Release 1.0.</span>
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfFile</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> filename<span class="hl opt">,</span> <span class="hl kwb">const</span> FloatingBaseType floating_base_type<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfFileToWorld</span><span class="hl opt">(</span>filename<span class="hl opt">,</span> floating_base_type<span class="hl opt">,</span>
+                                             tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfFile</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> filename<span class="hl opt">,</span> <span class="hl kwb">const</span> FloatingBaseType floating_base_type<span class="hl opt">,</span>
+    std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> weld_to_frame<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwd">DRAKE_DEMAND</span><span class="hl opt">(</span>tree <span class="hl opt">&amp;&amp;</span> <span class="hl str">&quot;You must provide a valid RigidBodyTree pointer.&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwb">const</span> string full_path_filename <span class="hl opt">=</span> <span class="hl kwd">GetFullPath</span><span class="hl opt">(</span>filename<span class="hl opt">);</span>
+  PackageMap package_map<span class="hl opt">;</span>
+  package_map<span class="hl opt">.</span><span class="hl kwd">PopulateUpstreamToDrake</span><span class="hl opt">(</span>full_path_filename<span class="hl opt">);</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfFileSearchingInRosPackages</span><span class="hl opt">(</span>
+      full_path_filename<span class="hl opt">,</span> package_map<span class="hl opt">,</span> floating_base_type<span class="hl opt">,</span> weld_to_frame<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfFileSearchingInRosPackages</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> filename<span class="hl opt">,</span> <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> FloatingBaseType floating_base_type<span class="hl opt">,</span>
+    std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> weld_to_frame<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwd">DRAKE_DEMAND</span><span class="hl opt">(</span>tree <span class="hl opt">&amp;&amp;</span> <span class="hl str">&quot;You must provide a valid RigidBodyTree pointer.&quot;</span><span class="hl opt">);</span>
+
+  <span class="hl slc">// Opens the URDF file and feeds it into the XML parser.</span>
+  XMLDocument xml_doc<span class="hl opt">;</span>
+  xml_doc<span class="hl opt">.</span><span class="hl kwd">LoadFile</span><span class="hl opt">(</span>filename<span class="hl opt">.</span><span class="hl kwd">data</span><span class="hl opt">());</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>xml_doc<span class="hl opt">.</span><span class="hl kwd">ErrorID</span><span class="hl opt">()) {</span>
+    <span class="hl kwa">throw</span> std<span class="hl opt">::</span><span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: Failed to &quot;</span>
+        <span class="hl str">&quot;parse XML in file &quot;</span> <span class="hl opt">+</span> filename <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> xml_doc<span class="hl opt">.</span><span class="hl kwd">ErrorName</span><span class="hl opt">());</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Uses the directory holding the URDF to be the root directory</span>
+  <span class="hl slc">// in which to search for files referenced within the URDF file.</span>
+  string root_dir <span class="hl opt">=</span> <span class="hl str">&quot;.&quot;</span><span class="hl opt">;</span>
+  <span class="hl kwb">size_t</span> found <span class="hl opt">=</span> filename<span class="hl opt">.</span><span class="hl kwd">find_last_of</span><span class="hl opt">(</span><span class="hl str">&quot;/</span><span class="hl esc">\\</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>found <span class="hl opt">!=</span> string<span class="hl opt">::</span>npos<span class="hl opt">) {</span>
+    root_dir <span class="hl opt">=</span> filename<span class="hl opt">.</span><span class="hl kwd">substr</span><span class="hl opt">(</span><span class="hl num">0</span><span class="hl opt">,</span> found<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwa">return</span> <span class="hl kwd">ParseUrdf</span><span class="hl opt">(&amp;</span>xml_doc<span class="hl opt">,</span> package_map<span class="hl opt">,</span> root_dir<span class="hl opt">,</span> floating_base_type<span class="hl opt">,</span>
+                   weld_to_frame<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl slc">// TODO(liang.fok) Remove this deprecated method prior to Release 1.0.</span>
+ModelInstanceIdTable <span class="hl kwd">AddModelInstanceFromUrdfFile</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> filename<span class="hl opt">,</span> <span class="hl kwb">const</span> PackageMap<span class="hl opt">&amp;</span> package_map<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> FloatingBaseType floating_base_type<span class="hl opt">,</span>
+    std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> weld_to_frame<span class="hl opt">,</span>
+    RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> tree<span class="hl opt">) {</span>
+  <span class="hl kwa">return</span> <span class="hl kwd">AddModelInstanceFromUrdfFileSearchingInRosPackages</span><span class="hl opt">(</span>
+      filename<span class="hl opt">,</span> package_map<span class="hl opt">,</span> floating_base_type<span class="hl opt">,</span> weld_to_frame<span class="hl opt">,</span> tree<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+std<span class="hl opt">::</span>shared_ptr<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;</span> <span class="hl kwd">MakeRigidBodyFrameFromUrdfNode</span><span class="hl opt">(</span>
+    <span class="hl kwb">const</span> RigidBodyTree<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&amp;</span> tree<span class="hl opt">,</span> <span class="hl kwb">const</span> tinyxml2<span class="hl opt">::</span>XMLElement<span class="hl opt">&amp;</span> link<span class="hl opt">,</span>
+    <span class="hl kwb">const</span> tinyxml2<span class="hl opt">::</span>XMLElement<span class="hl opt">*</span> pose<span class="hl opt">,</span> <span class="hl kwb">const</span> string<span class="hl opt">&amp;</span> name<span class="hl opt">,</span>
+    <span class="hl kwb">int</span> model_instance_id<span class="hl opt">) {</span>
+  string body_name <span class="hl opt">=</span> link<span class="hl opt">.</span><span class="hl kwd">Attribute</span><span class="hl opt">(</span><span class="hl str">&quot;link&quot;</span><span class="hl opt">);</span>
+  RigidBody<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;*</span> body <span class="hl opt">=</span>
+      tree<span class="hl opt">.</span><span class="hl kwd">FindBody</span><span class="hl opt">(</span>body_name<span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span> <span class="hl com">/* model_name */</span><span class="hl opt">,</span> model_instance_id<span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>body <span class="hl opt">==</span> <span class="hl kwc">nullptr</span><span class="hl opt">) {</span>
+    <span class="hl kwa">throw</span> <span class="hl kwd">runtime_error</span><span class="hl opt">(</span><span class="hl kwd">string</span><span class="hl opt">(</span>__FILE__<span class="hl opt">) +</span> <span class="hl str">&quot;: &quot;</span> <span class="hl opt">+</span> __func__ <span class="hl opt">+</span> <span class="hl str">&quot;: ERROR: &quot;</span>
+        <span class="hl str">&quot;Couldn't find body</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span> body_name <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span> <span class="hl str">referenced in frame</span> <span class="hl esc">\&quot;</span><span class="hl str">&quot;</span> <span class="hl opt">+</span>
+        name <span class="hl opt">+</span> <span class="hl str">&quot;</span><span class="hl esc">\&quot;</span><span class="hl str">.&quot;</span><span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  Vector3d xyz <span class="hl opt">=</span> Vector3d<span class="hl opt">::</span><span class="hl kwd">Zero</span><span class="hl opt">();</span>
+  Vector3d rpy <span class="hl opt">=</span> Vector3d<span class="hl opt">::</span><span class="hl kwd">Zero</span><span class="hl opt">();</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>pose<span class="hl opt">) {</span>
+    <span class="hl kwd">parseVectorAttribute</span><span class="hl opt">(</span>pose<span class="hl opt">,</span> <span class="hl str">&quot;xyz&quot;</span><span class="hl opt">,</span> xyz<span class="hl opt">);</span>
+    <span class="hl kwd">parseVectorAttribute</span><span class="hl opt">(</span>pose<span class="hl opt">,</span> <span class="hl str">&quot;rpy&quot;</span><span class="hl opt">,</span> rpy<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+  <span class="hl kwa">return</span> allocate_shared<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;(</span>
+      Eigen<span class="hl opt">::</span>aligned_allocator<span class="hl opt">&lt;</span>RigidBodyFrame<span class="hl opt">&lt;</span><span class="hl kwb">double</span><span class="hl opt">&gt;&gt;(),</span> name<span class="hl opt">,</span> body<span class="hl opt">,</span> xyz<span class="hl opt">,</span> rpy<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl opt">}</span>  <span class="hl slc">// namespace urdf</span>
+<span class="hl opt">}</span>  <span class="hl slc">// namespace parsers</span>
+<span class="hl opt">}</span>  <span class="hl slc">// namespace drake</span>
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->

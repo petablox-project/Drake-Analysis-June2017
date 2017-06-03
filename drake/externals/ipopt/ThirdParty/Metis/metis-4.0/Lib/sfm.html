@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/ipopt/ThirdParty/Metis/metis-4.0/Lib/sfm.c</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl com">/*</span>
+<span class="hl com"> * Copyright 1997, Regents of the University of Minnesota</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * sfm.c</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * This file contains code that implementes an FM-based separator refinement</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * Started 8/1/97</span>
+<span class="hl com"> * George</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * $Id: sfm.c,v 1.1 1998/11/27 17:59:30 karypis Exp $</span>
+<span class="hl com"> *</span>
+<span class="hl com"> */</span>
+
+<span class="hl ppc">#include &lt;metis.h&gt;</span>
+
+
+<span class="hl com">/*************************************************************************</span>
+<span class="hl com">* This function performs a node-based FM refinement </span>
+<span class="hl com">**************************************************************************/</span>
+<span class="hl kwb">void</span> <span class="hl kwd">FM_2WayNodeRefine</span><span class="hl opt">(</span>CtrlType <span class="hl opt">*</span>ctrl<span class="hl opt">,</span> GraphType <span class="hl opt">*</span>graph<span class="hl opt">,</span> <span class="hl kwb">float</span> ubfactor<span class="hl opt">,</span> <span class="hl kwb">int</span> npasses<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  <span class="hl kwb">int</span> i<span class="hl opt">,</span> ii<span class="hl opt">,</span> j<span class="hl opt">,</span> k<span class="hl opt">,</span> jj<span class="hl opt">,</span> kk<span class="hl opt">,</span> nvtxs<span class="hl opt">,</span> nbnd<span class="hl opt">,</span> nswaps<span class="hl opt">,</span> nmind<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>xadj<span class="hl opt">, *</span>vwgt<span class="hl opt">, *</span>adjncy<span class="hl opt">, *</span>where<span class="hl opt">, *</span>pwgts<span class="hl opt">, *</span>edegrees<span class="hl opt">, *</span>bndind<span class="hl opt">, *</span>bndptr<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>mptr<span class="hl opt">, *</span>mind<span class="hl opt">, *</span>moved<span class="hl opt">, *</span>swaps<span class="hl opt">, *</span>perm<span class="hl opt">;</span>
+  PQueueType parts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span> 
+  NRInfoType <span class="hl opt">*</span>rinfo<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> higain<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> mincut<span class="hl opt">,</span> initcut<span class="hl opt">,</span> mincutorder<span class="hl opt">;</span>	
+  <span class="hl kwb">int</span> pass<span class="hl opt">,</span> to<span class="hl opt">,</span> other<span class="hl opt">,</span> limit<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> badmaxpwgt<span class="hl opt">,</span> mindiff<span class="hl opt">,</span> newdiff<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> u<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> g<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+
+  nvtxs <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">;</span>
+  xadj <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>xadj<span class="hl opt">;</span>
+  adjncy <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>adjncy<span class="hl opt">;</span>
+  vwgt <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>vwgt<span class="hl opt">;</span>
+
+  bndind <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndind<span class="hl opt">;</span>
+  bndptr <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndptr<span class="hl opt">;</span>
+  where <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>where<span class="hl opt">;</span>
+  pwgts <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>pwgts<span class="hl opt">;</span>
+  rinfo <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nrinfo<span class="hl opt">;</span>
+
+
+  i <span class="hl opt">=</span> <span class="hl kwd">ComputeMaxNodeGain</span><span class="hl opt">(</span>nvtxs<span class="hl opt">,</span> xadj<span class="hl opt">,</span> adjncy<span class="hl opt">,</span> vwgt<span class="hl opt">);</span>
+  <span class="hl kwd">PQueueInit</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> nvtxs<span class="hl opt">,</span> i<span class="hl opt">);</span>
+  <span class="hl kwd">PQueueInit</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> nvtxs<span class="hl opt">,</span> i<span class="hl opt">);</span>
+
+  moved <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  swaps <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  mptr <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+  mind <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  perm <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+
+  <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+    <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Partitions: [%6d %6d] Nv-Nb[%6d %6d]. ISep: %6d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>mincut<span class="hl opt">));</span>
+
+  badmaxpwgt <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">)(</span>ubfactor<span class="hl opt">*(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">])/</span><span class="hl num">2</span><span class="hl opt">);</span>
+
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>pass<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> pass<span class="hl opt">&lt;</span>npasses<span class="hl opt">;</span> pass<span class="hl opt">++) {</span>
+    <span class="hl kwd">idxset</span><span class="hl opt">(</span>nvtxs<span class="hl opt">, -</span><span class="hl num">1</span><span class="hl opt">,</span> moved<span class="hl opt">);</span>
+    <span class="hl kwd">PQueueReset</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+    <span class="hl kwd">PQueueReset</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+
+    mincutorder <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    initcut <span class="hl opt">=</span> mincut <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>mincut<span class="hl opt">;</span>
+    nbnd <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">;</span>
+
+    <span class="hl kwd">RandomPermute</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> perm<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>ii<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> ii<span class="hl opt">&lt;</span>nbnd<span class="hl opt">;</span> ii<span class="hl opt">++) {</span>
+      i <span class="hl opt">=</span> bndind<span class="hl opt">[</span>perm<span class="hl opt">[</span>ii<span class="hl opt">]];</span>
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>i<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">);</span>
+      <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> i<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>i<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>i<span class="hl opt">].</span>edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+      <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> i<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>i<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>i<span class="hl opt">].</span>edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodeBnd</span><span class="hl opt">(</span>graph<span class="hl opt">,</span> nbnd<span class="hl opt">));</span>
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodePartitionParams</span><span class="hl opt">(</span>graph<span class="hl opt">));</span>
+
+    limit <span class="hl opt">= (</span>ctrl<span class="hl opt">-&gt;</span>oflags<span class="hl opt">&amp;</span>OFLAG_COMPRESS ? <span class="hl kwd">amin</span><span class="hl opt">(</span><span class="hl num">5</span><span class="hl opt">*</span>nbnd<span class="hl opt">,</span> <span class="hl num">400</span><span class="hl opt">) :</span> <span class="hl kwd">amin</span><span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">*</span>nbnd<span class="hl opt">,</span> <span class="hl num">300</span><span class="hl opt">));</span>
+
+    <span class="hl com">/******************************************************</span>
+<span class="hl com">    * Get into the FM loop</span>
+<span class="hl com">    *******************************************************/</span>
+    mptr<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> nmind <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    mindiff <span class="hl opt">=</span> <span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]-</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+    to <span class="hl opt">= (</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &lt;</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">0</span> <span class="hl opt">:</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>nswaps<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> nswaps<span class="hl opt">&lt;</span>nvtxs<span class="hl opt">;</span> nswaps<span class="hl opt">++) {</span>
+      u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl kwd">PQueueSeeMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>  
+      u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl kwd">PQueueSeeMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] != -</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] != -</span><span class="hl num">1</span><span class="hl opt">) {</span>
+        g<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]]-</span>rinfo<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]].</span>edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">];</span>
+        g<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]]-</span>rinfo<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]].</span>edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">];</span>
+
+        to <span class="hl opt">= (</span>g<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &gt;</span> g<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">0</span> <span class="hl opt">: (</span>g<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &lt;</span> g<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">1</span> <span class="hl opt">:</span> pass<span class="hl opt">%</span><span class="hl num">2</span><span class="hl opt">));</span> 
+        <span class="hl com">/* to = (g[0] &gt; g[1] ? 0 : (g[0] &lt; g[1] ? 1 : (pwgts[0] &lt; pwgts[1] ? 0 : 1))); */</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span>to<span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span>to<span class="hl opt">]] &gt;</span> badmaxpwgt<span class="hl opt">)</span> 
+          to <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] == -</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">) {</span>
+        <span class="hl kwa">break</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] != -</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]] &lt;=</span> badmaxpwgt<span class="hl opt">) {</span>
+        to <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] != -</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]] &lt;=</span> badmaxpwgt<span class="hl opt">) {</span>
+        to <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span>
+        <span class="hl kwa">break</span><span class="hl opt">;</span>
+
+      other <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+
+      higain <span class="hl opt">=</span> <span class="hl kwd">PQueueGetMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>to<span class="hl opt">]);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>higain<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">)</span> <span class="hl com">/* Delete if it was in the separator originally */</span>
+        <span class="hl kwd">PQueueDelete</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>other<span class="hl opt">],</span> higain<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">]);</span>
+
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>higain<span class="hl opt">] != -</span><span class="hl num">1</span><span class="hl opt">);</span>
+
+      pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] -= (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+
+      newdiff <span class="hl opt">=</span> <span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span>to<span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">] - (</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]));</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] &lt;</span> mincut <span class="hl opt">|| (</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] ==</span> mincut <span class="hl opt">&amp;&amp;</span> newdiff <span class="hl opt">&lt;</span> mindiff<span class="hl opt">)) {</span>
+        mincut <span class="hl opt">=</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+        mincutorder <span class="hl opt">=</span> nswaps<span class="hl opt">;</span>
+        mindiff <span class="hl opt">=</span> newdiff<span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>nswaps <span class="hl opt">-</span> mincutorder <span class="hl opt">&gt;</span> limit<span class="hl opt">) {</span>
+          pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] += (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+          <span class="hl kwa">break</span><span class="hl opt">;</span> <span class="hl com">/* No further improvement, break out */</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl kwd">BNDDelete</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> higain<span class="hl opt">);</span>
+      pwgts<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+      where<span class="hl opt">[</span>higain<span class="hl opt">] =</span> to<span class="hl opt">;</span>
+      moved<span class="hl opt">[</span>higain<span class="hl opt">] =</span> nswaps<span class="hl opt">;</span>
+      swaps<span class="hl opt">[</span>nswaps<span class="hl opt">] =</span> higain<span class="hl opt">;</span>  
+
+
+      <span class="hl com">/**********************************************************</span>
+<span class="hl com">      * Update the degrees of the affected nodes</span>
+<span class="hl com">      ***********************************************************/</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">) {</span> <span class="hl com">/* For the in-separator vertices modify their edegree[to] */</span>
+          oldgain <span class="hl opt">=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">];</span>
+          rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span> <span class="hl opt">||</span> moved<span class="hl opt">[</span>k<span class="hl opt">] == -(</span><span class="hl num">2</span><span class="hl opt">+</span>other<span class="hl opt">))</span>
+            <span class="hl kwd">PQueueUpdate</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>other<span class="hl opt">],</span> k<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> oldgain<span class="hl opt">-</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]);</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> other<span class="hl opt">) {</span> <span class="hl com">/* This vertex is pulled into the separator */</span>
+          <span class="hl kwd">ASSERTP</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">, (</span><span class="hl str">&quot;%d %d %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> k<span class="hl opt">,</span> bndptr<span class="hl opt">[</span>k<span class="hl opt">],</span> where<span class="hl opt">[</span>k<span class="hl opt">]));</span>
+          <span class="hl kwd">BNDInsert</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> k<span class="hl opt">);</span>
+
+          mind<span class="hl opt">[</span>nmind<span class="hl opt">++] =</span> k<span class="hl opt">;</span>  <span class="hl com">/* Keep track for rollback */</span>
+          where<span class="hl opt">[</span>k<span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span>
+          pwgts<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+
+          edegrees <span class="hl opt">=</span> rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">;</span>
+          edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>jj<span class="hl opt">=</span>xadj<span class="hl opt">[</span>k<span class="hl opt">];</span> jj<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>k<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> jj<span class="hl opt">++) {</span>
+            kk <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>jj<span class="hl opt">];</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>kk<span class="hl opt">] !=</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+              edegrees<span class="hl opt">[</span>where<span class="hl opt">[</span>kk<span class="hl opt">]] +=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">];</span>
+            <span class="hl kwa">else</span> <span class="hl opt">{</span>
+              oldgain <span class="hl opt">=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">];</span>
+              rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+              <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>kk<span class="hl opt">] == -</span><span class="hl num">1</span> <span class="hl opt">||</span> moved<span class="hl opt">[</span>kk<span class="hl opt">] == -(</span><span class="hl num">2</span><span class="hl opt">+</span>to<span class="hl opt">))</span>
+                <span class="hl kwd">PQueueUpdate</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>to<span class="hl opt">],</span> kk<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> oldgain<span class="hl opt">+</span>vwgt<span class="hl opt">[</span>k<span class="hl opt">]);</span>
+            <span class="hl opt">}</span>
+          <span class="hl opt">}</span>
+
+          <span class="hl com">/* Insert the new vertex into the priority queue. Only one side! */</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">) {</span>
+            <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>to<span class="hl opt">],</span> k<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]-</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+            moved<span class="hl opt">[</span>k<span class="hl opt">] = -(</span><span class="hl num">2</span><span class="hl opt">+</span>to<span class="hl opt">);</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      mptr<span class="hl opt">[</span>nswaps<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">] =</span> nmind<span class="hl opt">;</span>
+
+      <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_MOVEINFO<span class="hl opt">,</span>
+            <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Moved %6d to %3d, Gain: %5d [%5d] [%4d %4d]</span> <span class="hl esc">\t</span><span class="hl str">[%5d %5d %5d]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> higain<span class="hl opt">,</span> to<span class="hl opt">,</span> g<span class="hl opt">[</span>to<span class="hl opt">],</span> g<span class="hl opt">[</span>other<span class="hl opt">],</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span>to<span class="hl opt">]],</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span>other<span class="hl opt">]],</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]));</span>
+
+    <span class="hl opt">}</span>
+
+
+    <span class="hl com">/****************************************************************</span>
+<span class="hl com">    * Roll back computation </span>
+<span class="hl com">    *****************************************************************/</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>nswaps<span class="hl opt">--;</span> nswaps<span class="hl opt">&gt;</span>mincutorder<span class="hl opt">;</span> nswaps<span class="hl opt">--) {</span>
+      higain <span class="hl opt">=</span> swaps<span class="hl opt">[</span>nswaps<span class="hl opt">];</span>
+
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodePartitionParams</span><span class="hl opt">(</span>graph<span class="hl opt">));</span>
+
+      to <span class="hl opt">=</span> where<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+      other <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+      <span class="hl kwd">INC_DEC</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span>to<span class="hl opt">],</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">]);</span>
+      where<span class="hl opt">[</span>higain<span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span>
+      <span class="hl kwd">BNDInsert</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> higain<span class="hl opt">);</span>
+
+      edegrees <span class="hl opt">=</span> rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">;</span>
+      edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+          rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+        <span class="hl kwa">else</span>
+          edegrees<span class="hl opt">[</span>where<span class="hl opt">[</span>k<span class="hl opt">]] +=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl com">/* Push nodes out of the separator */</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>mptr<span class="hl opt">[</span>nswaps<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>mptr<span class="hl opt">[</span>nswaps<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> mind<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">);</span>
+        where<span class="hl opt">[</span>k<span class="hl opt">] =</span> other<span class="hl opt">;</span>
+        <span class="hl kwd">INC_DEC</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]);</span>
+        <span class="hl kwd">BNDDelete</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> k<span class="hl opt">);</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>jj<span class="hl opt">=</span>xadj<span class="hl opt">[</span>k<span class="hl opt">];</span> jj<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>k<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> jj<span class="hl opt">++) {</span>
+          kk <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>jj<span class="hl opt">];</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>kk<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+            rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>mincut <span class="hl opt">==</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]);</span>
+
+    <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+      <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;</span><span class="hl esc">\t</span><span class="hl str">Minimum sep: %6d at %5d, PWGTS: [%6d %6d], NBND: %6d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> mincut<span class="hl opt">,</span> mincutorder<span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> nbnd<span class="hl opt">));</span>
+
+    graph<span class="hl opt">-&gt;</span>mincut <span class="hl opt">=</span> mincut<span class="hl opt">;</span>
+    graph<span class="hl opt">-&gt;</span>nbnd <span class="hl opt">=</span> nbnd<span class="hl opt">;</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>mincutorder <span class="hl opt">== -</span><span class="hl num">1</span> <span class="hl opt">||</span> mincut <span class="hl opt">&gt;=</span> initcut<span class="hl opt">)</span>
+      <span class="hl kwa">break</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwd">PQueueFree</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+  <span class="hl kwd">PQueueFree</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl com">/*************************************************************************</span>
+<span class="hl com">* This function performs a node-based FM refinement </span>
+<span class="hl com">**************************************************************************/</span>
+<span class="hl kwb">void</span> <span class="hl kwd">FM_2WayNodeRefine2</span><span class="hl opt">(</span>CtrlType <span class="hl opt">*</span>ctrl<span class="hl opt">,</span> GraphType <span class="hl opt">*</span>graph<span class="hl opt">,</span> <span class="hl kwb">float</span> ubfactor<span class="hl opt">,</span> <span class="hl kwb">int</span> npasses<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  <span class="hl kwb">int</span> i<span class="hl opt">,</span> ii<span class="hl opt">,</span> j<span class="hl opt">,</span> k<span class="hl opt">,</span> jj<span class="hl opt">,</span> kk<span class="hl opt">,</span> nvtxs<span class="hl opt">,</span> nbnd<span class="hl opt">,</span> nswaps<span class="hl opt">,</span> nmind<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>xadj<span class="hl opt">, *</span>vwgt<span class="hl opt">, *</span>adjncy<span class="hl opt">, *</span>where<span class="hl opt">, *</span>pwgts<span class="hl opt">, *</span>edegrees<span class="hl opt">, *</span>bndind<span class="hl opt">, *</span>bndptr<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>mptr<span class="hl opt">, *</span>mind<span class="hl opt">, *</span>moved<span class="hl opt">, *</span>swaps<span class="hl opt">, *</span>perm<span class="hl opt">;</span>
+  PQueueType parts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span> 
+  NRInfoType <span class="hl opt">*</span>rinfo<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> higain<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> mincut<span class="hl opt">,</span> initcut<span class="hl opt">,</span> mincutorder<span class="hl opt">;</span>	
+  <span class="hl kwb">int</span> pass<span class="hl opt">,</span> to<span class="hl opt">,</span> other<span class="hl opt">,</span> limit<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> badmaxpwgt<span class="hl opt">,</span> mindiff<span class="hl opt">,</span> newdiff<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> u<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> g<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+
+  nvtxs <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">;</span>
+  xadj <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>xadj<span class="hl opt">;</span>
+  adjncy <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>adjncy<span class="hl opt">;</span>
+  vwgt <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>vwgt<span class="hl opt">;</span>
+
+  bndind <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndind<span class="hl opt">;</span>
+  bndptr <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndptr<span class="hl opt">;</span>
+  where <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>where<span class="hl opt">;</span>
+  pwgts <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>pwgts<span class="hl opt">;</span>
+  rinfo <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nrinfo<span class="hl opt">;</span>
+
+
+  i <span class="hl opt">=</span> <span class="hl kwd">ComputeMaxNodeGain</span><span class="hl opt">(</span>nvtxs<span class="hl opt">,</span> xadj<span class="hl opt">,</span> adjncy<span class="hl opt">,</span> vwgt<span class="hl opt">);</span>
+  <span class="hl kwd">PQueueInit</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> nvtxs<span class="hl opt">,</span> i<span class="hl opt">);</span>
+  <span class="hl kwd">PQueueInit</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> nvtxs<span class="hl opt">,</span> i<span class="hl opt">);</span>
+
+  moved <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  swaps <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  mptr <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+  mind <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  perm <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+
+  <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+    <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Partitions: [%6d %6d] Nv-Nb[%6d %6d]. ISep: %6d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>mincut<span class="hl opt">));</span>
+
+  badmaxpwgt <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">)(</span>ubfactor<span class="hl opt">*(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">])/</span><span class="hl num">2</span><span class="hl opt">);</span>
+
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>pass<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> pass<span class="hl opt">&lt;</span>npasses<span class="hl opt">;</span> pass<span class="hl opt">++) {</span>
+    <span class="hl kwd">idxset</span><span class="hl opt">(</span>nvtxs<span class="hl opt">, -</span><span class="hl num">1</span><span class="hl opt">,</span> moved<span class="hl opt">);</span>
+    <span class="hl kwd">PQueueReset</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+    <span class="hl kwd">PQueueReset</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+
+    mincutorder <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    initcut <span class="hl opt">=</span> mincut <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>mincut<span class="hl opt">;</span>
+    nbnd <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">;</span>
+
+    <span class="hl kwd">RandomPermute</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> perm<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>ii<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> ii<span class="hl opt">&lt;</span>nbnd<span class="hl opt">;</span> ii<span class="hl opt">++) {</span>
+      i <span class="hl opt">=</span> bndind<span class="hl opt">[</span>perm<span class="hl opt">[</span>ii<span class="hl opt">]];</span>
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>i<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">);</span>
+      <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> i<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>i<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>i<span class="hl opt">].</span>edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+      <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> i<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>i<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>i<span class="hl opt">].</span>edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodeBnd</span><span class="hl opt">(</span>graph<span class="hl opt">,</span> nbnd<span class="hl opt">));</span>
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodePartitionParams</span><span class="hl opt">(</span>graph<span class="hl opt">));</span>
+
+    limit <span class="hl opt">= (</span>ctrl<span class="hl opt">-&gt;</span>oflags<span class="hl opt">&amp;</span>OFLAG_COMPRESS ? <span class="hl kwd">amin</span><span class="hl opt">(</span><span class="hl num">5</span><span class="hl opt">*</span>nbnd<span class="hl opt">,</span> <span class="hl num">400</span><span class="hl opt">) :</span> <span class="hl kwd">amin</span><span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">*</span>nbnd<span class="hl opt">,</span> <span class="hl num">300</span><span class="hl opt">));</span>
+
+    <span class="hl com">/******************************************************</span>
+<span class="hl com">    * Get into the FM loop</span>
+<span class="hl com">    *******************************************************/</span>
+    mptr<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> nmind <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    mindiff <span class="hl opt">=</span> <span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]-</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+    to <span class="hl opt">= (</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &lt;</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">0</span> <span class="hl opt">:</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>nswaps<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> nswaps<span class="hl opt">&lt;</span>nvtxs<span class="hl opt">;</span> nswaps<span class="hl opt">++) {</span>
+      badmaxpwgt <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">)(</span>ubfactor<span class="hl opt">*(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]/</span><span class="hl num">2</span><span class="hl opt">)/</span><span class="hl num">2</span><span class="hl opt">);</span>
+
+      u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl kwd">PQueueSeeMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>  
+      u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl kwd">PQueueSeeMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] != -</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] != -</span><span class="hl num">1</span><span class="hl opt">) {</span>
+        g<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]]-</span>rinfo<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]].</span>edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">];</span>
+        g<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]]-</span>rinfo<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]].</span>edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">];</span>
+
+        to <span class="hl opt">= (</span>g<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &gt;</span> g<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">0</span> <span class="hl opt">: (</span>g<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &lt;</span> g<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">1</span> <span class="hl opt">:</span> pass<span class="hl opt">%</span><span class="hl num">2</span><span class="hl opt">));</span> 
+        <span class="hl com">/* to = (g[0] &gt; g[1] ? 0 : (g[0] &lt; g[1] ? 1 : (pwgts[0] &lt; pwgts[1] ? 0 : 1))); */</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span>to<span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span>to<span class="hl opt">]] &gt;</span> badmaxpwgt<span class="hl opt">)</span> 
+          to <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] == -</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">) {</span>
+        <span class="hl kwa">break</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] != -</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]] &lt;=</span> badmaxpwgt<span class="hl opt">) {</span>
+        to <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] != -</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]] &lt;=</span> badmaxpwgt<span class="hl opt">) {</span>
+        to <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span>
+        <span class="hl kwa">break</span><span class="hl opt">;</span>
+
+      other <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+
+      higain <span class="hl opt">=</span> <span class="hl kwd">PQueueGetMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>to<span class="hl opt">]);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>higain<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">)</span> <span class="hl com">/* Delete if it was in the separator originally */</span>
+        <span class="hl kwd">PQueueDelete</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>other<span class="hl opt">],</span> higain<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">]);</span>
+
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>higain<span class="hl opt">] != -</span><span class="hl num">1</span><span class="hl opt">);</span>
+
+      pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] -= (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+
+      newdiff <span class="hl opt">=</span> <span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span>to<span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">] - (</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]));</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] &lt;</span> mincut <span class="hl opt">|| (</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] ==</span> mincut <span class="hl opt">&amp;&amp;</span> newdiff <span class="hl opt">&lt;</span> mindiff<span class="hl opt">)) {</span>
+        mincut <span class="hl opt">=</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+        mincutorder <span class="hl opt">=</span> nswaps<span class="hl opt">;</span>
+        mindiff <span class="hl opt">=</span> newdiff<span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>nswaps <span class="hl opt">-</span> mincutorder <span class="hl opt">&gt;</span> limit<span class="hl opt">) {</span>
+          pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] += (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+          <span class="hl kwa">break</span><span class="hl opt">;</span> <span class="hl com">/* No further improvement, break out */</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl kwd">BNDDelete</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> higain<span class="hl opt">);</span>
+      pwgts<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+      where<span class="hl opt">[</span>higain<span class="hl opt">] =</span> to<span class="hl opt">;</span>
+      moved<span class="hl opt">[</span>higain<span class="hl opt">] =</span> nswaps<span class="hl opt">;</span>
+      swaps<span class="hl opt">[</span>nswaps<span class="hl opt">] =</span> higain<span class="hl opt">;</span>  
+
+
+      <span class="hl com">/**********************************************************</span>
+<span class="hl com">      * Update the degrees of the affected nodes</span>
+<span class="hl com">      ***********************************************************/</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">) {</span> <span class="hl com">/* For the in-separator vertices modify their edegree[to] */</span>
+          oldgain <span class="hl opt">=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">];</span>
+          rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span> <span class="hl opt">||</span> moved<span class="hl opt">[</span>k<span class="hl opt">] == -(</span><span class="hl num">2</span><span class="hl opt">+</span>other<span class="hl opt">))</span>
+            <span class="hl kwd">PQueueUpdate</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>other<span class="hl opt">],</span> k<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> oldgain<span class="hl opt">-</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]);</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> other<span class="hl opt">) {</span> <span class="hl com">/* This vertex is pulled into the separator */</span>
+          <span class="hl kwd">ASSERTP</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">, (</span><span class="hl str">&quot;%d %d %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> k<span class="hl opt">,</span> bndptr<span class="hl opt">[</span>k<span class="hl opt">],</span> where<span class="hl opt">[</span>k<span class="hl opt">]));</span>
+          <span class="hl kwd">BNDInsert</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> k<span class="hl opt">);</span>
+
+          mind<span class="hl opt">[</span>nmind<span class="hl opt">++] =</span> k<span class="hl opt">;</span>  <span class="hl com">/* Keep track for rollback */</span>
+          where<span class="hl opt">[</span>k<span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span>
+          pwgts<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+
+          edegrees <span class="hl opt">=</span> rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">;</span>
+          edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>jj<span class="hl opt">=</span>xadj<span class="hl opt">[</span>k<span class="hl opt">];</span> jj<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>k<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> jj<span class="hl opt">++) {</span>
+            kk <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>jj<span class="hl opt">];</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>kk<span class="hl opt">] !=</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+              edegrees<span class="hl opt">[</span>where<span class="hl opt">[</span>kk<span class="hl opt">]] +=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">];</span>
+            <span class="hl kwa">else</span> <span class="hl opt">{</span>
+              oldgain <span class="hl opt">=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">];</span>
+              rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+              <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>kk<span class="hl opt">] == -</span><span class="hl num">1</span> <span class="hl opt">||</span> moved<span class="hl opt">[</span>kk<span class="hl opt">] == -(</span><span class="hl num">2</span><span class="hl opt">+</span>to<span class="hl opt">))</span>
+                <span class="hl kwd">PQueueUpdate</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>to<span class="hl opt">],</span> kk<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> oldgain<span class="hl opt">+</span>vwgt<span class="hl opt">[</span>k<span class="hl opt">]);</span>
+            <span class="hl opt">}</span>
+          <span class="hl opt">}</span>
+
+          <span class="hl com">/* Insert the new vertex into the priority queue. Only one side! */</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">) {</span>
+            <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>to<span class="hl opt">],</span> k<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]-</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+            moved<span class="hl opt">[</span>k<span class="hl opt">] = -(</span><span class="hl num">2</span><span class="hl opt">+</span>to<span class="hl opt">);</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      mptr<span class="hl opt">[</span>nswaps<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">] =</span> nmind<span class="hl opt">;</span>
+
+      <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_MOVEINFO<span class="hl opt">,</span>
+            <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Moved %6d to %3d, Gain: %5d [%5d] [%4d %4d]</span> <span class="hl esc">\t</span><span class="hl str">[%5d %5d %5d]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> higain<span class="hl opt">,</span> to<span class="hl opt">,</span> g<span class="hl opt">[</span>to<span class="hl opt">],</span> g<span class="hl opt">[</span>other<span class="hl opt">],</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span>to<span class="hl opt">]],</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span>other<span class="hl opt">]],</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]));</span>
+
+    <span class="hl opt">}</span>
+
+
+    <span class="hl com">/****************************************************************</span>
+<span class="hl com">    * Roll back computation </span>
+<span class="hl com">    *****************************************************************/</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>nswaps<span class="hl opt">--;</span> nswaps<span class="hl opt">&gt;</span>mincutorder<span class="hl opt">;</span> nswaps<span class="hl opt">--) {</span>
+      higain <span class="hl opt">=</span> swaps<span class="hl opt">[</span>nswaps<span class="hl opt">];</span>
+
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodePartitionParams</span><span class="hl opt">(</span>graph<span class="hl opt">));</span>
+
+      to <span class="hl opt">=</span> where<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+      other <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+      <span class="hl kwd">INC_DEC</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span>to<span class="hl opt">],</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">]);</span>
+      where<span class="hl opt">[</span>higain<span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span>
+      <span class="hl kwd">BNDInsert</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> higain<span class="hl opt">);</span>
+
+      edegrees <span class="hl opt">=</span> rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">;</span>
+      edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+          rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+        <span class="hl kwa">else</span>
+          edegrees<span class="hl opt">[</span>where<span class="hl opt">[</span>k<span class="hl opt">]] +=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl com">/* Push nodes out of the separator */</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>mptr<span class="hl opt">[</span>nswaps<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>mptr<span class="hl opt">[</span>nswaps<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> mind<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">);</span>
+        where<span class="hl opt">[</span>k<span class="hl opt">] =</span> other<span class="hl opt">;</span>
+        <span class="hl kwd">INC_DEC</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]);</span>
+        <span class="hl kwd">BNDDelete</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> k<span class="hl opt">);</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>jj<span class="hl opt">=</span>xadj<span class="hl opt">[</span>k<span class="hl opt">];</span> jj<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>k<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> jj<span class="hl opt">++) {</span>
+          kk <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>jj<span class="hl opt">];</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>kk<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+            rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>mincut <span class="hl opt">==</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]);</span>
+
+    <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+      <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;</span><span class="hl esc">\t</span><span class="hl str">Minimum sep: %6d at %5d, PWGTS: [%6d %6d], NBND: %6d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> mincut<span class="hl opt">,</span> mincutorder<span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> nbnd<span class="hl opt">));</span>
+
+    graph<span class="hl opt">-&gt;</span>mincut <span class="hl opt">=</span> mincut<span class="hl opt">;</span>
+    graph<span class="hl opt">-&gt;</span>nbnd <span class="hl opt">=</span> nbnd<span class="hl opt">;</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>mincutorder <span class="hl opt">== -</span><span class="hl num">1</span> <span class="hl opt">||</span> mincut <span class="hl opt">&gt;=</span> initcut<span class="hl opt">)</span>
+      <span class="hl kwa">break</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwd">PQueueFree</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+  <span class="hl kwd">PQueueFree</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl com">/*************************************************************************</span>
+<span class="hl com">* This function performs a node-based FM refinement </span>
+<span class="hl com">**************************************************************************/</span>
+<span class="hl kwb">void</span> <span class="hl kwd">FM_2WayNodeRefineEqWgt</span><span class="hl opt">(</span>CtrlType <span class="hl opt">*</span>ctrl<span class="hl opt">,</span> GraphType <span class="hl opt">*</span>graph<span class="hl opt">,</span> <span class="hl kwb">int</span> npasses<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  <span class="hl kwb">int</span> i<span class="hl opt">,</span> ii<span class="hl opt">,</span> j<span class="hl opt">,</span> k<span class="hl opt">,</span> jj<span class="hl opt">,</span> kk<span class="hl opt">,</span> nvtxs<span class="hl opt">,</span> nbnd<span class="hl opt">,</span> nswaps<span class="hl opt">,</span> nmind<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>xadj<span class="hl opt">, *</span>vwgt<span class="hl opt">, *</span>adjncy<span class="hl opt">, *</span>where<span class="hl opt">, *</span>pwgts<span class="hl opt">, *</span>edegrees<span class="hl opt">, *</span>bndind<span class="hl opt">, *</span>bndptr<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>mptr<span class="hl opt">, *</span>mind<span class="hl opt">, *</span>moved<span class="hl opt">, *</span>swaps<span class="hl opt">, *</span>perm<span class="hl opt">;</span>
+  PQueueType parts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span> 
+  NRInfoType <span class="hl opt">*</span>rinfo<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> higain<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> mincut<span class="hl opt">,</span> initcut<span class="hl opt">,</span> mincutorder<span class="hl opt">;</span>	
+  <span class="hl kwb">int</span> pass<span class="hl opt">,</span> to<span class="hl opt">,</span> other<span class="hl opt">,</span> limit<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> mindiff<span class="hl opt">,</span> newdiff<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> u<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> g<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+
+  nvtxs <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">;</span>
+  xadj <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>xadj<span class="hl opt">;</span>
+  adjncy <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>adjncy<span class="hl opt">;</span>
+  vwgt <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>vwgt<span class="hl opt">;</span>
+
+  bndind <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndind<span class="hl opt">;</span>
+  bndptr <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndptr<span class="hl opt">;</span>
+  where <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>where<span class="hl opt">;</span>
+  pwgts <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>pwgts<span class="hl opt">;</span>
+  rinfo <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nrinfo<span class="hl opt">;</span>
+
+
+  i <span class="hl opt">=</span> <span class="hl kwd">ComputeMaxNodeGain</span><span class="hl opt">(</span>nvtxs<span class="hl opt">,</span> xadj<span class="hl opt">,</span> adjncy<span class="hl opt">,</span> vwgt<span class="hl opt">);</span>
+  <span class="hl kwd">PQueueInit</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> nvtxs<span class="hl opt">,</span> i<span class="hl opt">);</span>
+  <span class="hl kwd">PQueueInit</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> nvtxs<span class="hl opt">,</span> i<span class="hl opt">);</span>
+
+  moved <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  swaps <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  mptr <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+  mind <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  perm <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+
+  <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+    <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Partitions: [%6d %6d] Nv-Nb[%6d %6d]. ISep: %6d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>mincut<span class="hl opt">));</span>
+
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>pass<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> pass<span class="hl opt">&lt;</span>npasses<span class="hl opt">;</span> pass<span class="hl opt">++) {</span>
+    <span class="hl kwd">idxset</span><span class="hl opt">(</span>nvtxs<span class="hl opt">, -</span><span class="hl num">1</span><span class="hl opt">,</span> moved<span class="hl opt">);</span>
+    <span class="hl kwd">PQueueReset</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+    <span class="hl kwd">PQueueReset</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+
+    mincutorder <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    initcut <span class="hl opt">=</span> mincut <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>mincut<span class="hl opt">;</span>
+    nbnd <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">;</span>
+
+    <span class="hl kwd">RandomPermute</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> perm<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>ii<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> ii<span class="hl opt">&lt;</span>nbnd<span class="hl opt">;</span> ii<span class="hl opt">++) {</span>
+      i <span class="hl opt">=</span> bndind<span class="hl opt">[</span>perm<span class="hl opt">[</span>ii<span class="hl opt">]];</span>
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>i<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">);</span>
+      <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> i<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>i<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>i<span class="hl opt">].</span>edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+      <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> i<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>i<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>i<span class="hl opt">].</span>edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodeBnd</span><span class="hl opt">(</span>graph<span class="hl opt">,</span> nbnd<span class="hl opt">));</span>
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodePartitionParams</span><span class="hl opt">(</span>graph<span class="hl opt">));</span>
+
+    limit <span class="hl opt">= (</span>ctrl<span class="hl opt">-&gt;</span>oflags<span class="hl opt">&amp;</span>OFLAG_COMPRESS ? <span class="hl kwd">amin</span><span class="hl opt">(</span><span class="hl num">5</span><span class="hl opt">*</span>nbnd<span class="hl opt">,</span> <span class="hl num">400</span><span class="hl opt">) :</span> <span class="hl kwd">amin</span><span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">*</span>nbnd<span class="hl opt">,</span> <span class="hl num">300</span><span class="hl opt">));</span>
+
+    <span class="hl com">/******************************************************</span>
+<span class="hl com">    * Get into the FM loop</span>
+<span class="hl com">    *******************************************************/</span>
+    mptr<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> nmind <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    mindiff <span class="hl opt">=</span> <span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]-</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+    to <span class="hl opt">= (</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &lt;</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">0</span> <span class="hl opt">:</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>nswaps<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> nswaps<span class="hl opt">&lt;</span>nvtxs<span class="hl opt">;</span> nswaps<span class="hl opt">++) {</span>
+      to <span class="hl opt">= (</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &lt;</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">0</span> <span class="hl opt">:</span> <span class="hl num">1</span><span class="hl opt">);</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] ==</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]) {</span>
+        u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl kwd">PQueueSeeMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>  
+        u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl kwd">PQueueSeeMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] != -</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] != -</span><span class="hl num">1</span><span class="hl opt">) {</span>
+          g<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]]-</span>rinfo<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]].</span>edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">];</span>
+          g<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]]-</span>rinfo<span class="hl opt">[</span>u<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]].</span>edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">];</span>
+
+          to <span class="hl opt">= (</span>g<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &gt;</span> g<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">0</span> <span class="hl opt">: (</span>g<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &lt;</span> g<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">1</span> <span class="hl opt">:</span> pass<span class="hl opt">%</span><span class="hl num">2</span><span class="hl opt">));</span> 
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      other <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">((</span>higain <span class="hl opt">=</span> <span class="hl kwd">PQueueGetMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>to<span class="hl opt">])) == -</span><span class="hl num">1</span><span class="hl opt">)</span>
+        <span class="hl kwa">break</span><span class="hl opt">;</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>higain<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">)</span> <span class="hl com">/* Delete if it was in the separator originally */</span>
+        <span class="hl kwd">PQueueDelete</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>other<span class="hl opt">],</span> higain<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">]);</span>
+
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>higain<span class="hl opt">] != -</span><span class="hl num">1</span><span class="hl opt">);</span>
+
+      pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] -= (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+
+      newdiff <span class="hl opt">=</span> <span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span>to<span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">] - (</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]));</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] &lt;</span> mincut <span class="hl opt">|| (</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] ==</span> mincut <span class="hl opt">&amp;&amp;</span> newdiff <span class="hl opt">&lt;</span> mindiff<span class="hl opt">)) {</span>
+        mincut <span class="hl opt">=</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+        mincutorder <span class="hl opt">=</span> nswaps<span class="hl opt">;</span>
+        mindiff <span class="hl opt">=</span> newdiff<span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>nswaps <span class="hl opt">-</span> mincutorder <span class="hl opt">&gt;</span> limit<span class="hl opt">) {</span>
+          pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] += (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+          <span class="hl kwa">break</span><span class="hl opt">;</span> <span class="hl com">/* No further improvement, break out */</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl kwd">BNDDelete</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> higain<span class="hl opt">);</span>
+      pwgts<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+      where<span class="hl opt">[</span>higain<span class="hl opt">] =</span> to<span class="hl opt">;</span>
+      moved<span class="hl opt">[</span>higain<span class="hl opt">] =</span> nswaps<span class="hl opt">;</span>
+      swaps<span class="hl opt">[</span>nswaps<span class="hl opt">] =</span> higain<span class="hl opt">;</span>  
+
+
+      <span class="hl com">/**********************************************************</span>
+<span class="hl com">      * Update the degrees of the affected nodes</span>
+<span class="hl com">      ***********************************************************/</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">) {</span> <span class="hl com">/* For the in-separator vertices modify their edegree[to] */</span>
+          oldgain <span class="hl opt">=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">];</span>
+          rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span> <span class="hl opt">||</span> moved<span class="hl opt">[</span>k<span class="hl opt">] == -(</span><span class="hl num">2</span><span class="hl opt">+</span>other<span class="hl opt">))</span>
+            <span class="hl kwd">PQueueUpdate</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>other<span class="hl opt">],</span> k<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> oldgain<span class="hl opt">-</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]);</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> other<span class="hl opt">) {</span> <span class="hl com">/* This vertex is pulled into the separator */</span>
+          <span class="hl kwd">ASSERTP</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">, (</span><span class="hl str">&quot;%d %d %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> k<span class="hl opt">,</span> bndptr<span class="hl opt">[</span>k<span class="hl opt">],</span> where<span class="hl opt">[</span>k<span class="hl opt">]));</span>
+          <span class="hl kwd">BNDInsert</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> k<span class="hl opt">);</span>
+
+          mind<span class="hl opt">[</span>nmind<span class="hl opt">++] =</span> k<span class="hl opt">;</span>  <span class="hl com">/* Keep track for rollback */</span>
+          where<span class="hl opt">[</span>k<span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span>
+          pwgts<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+
+          edegrees <span class="hl opt">=</span> rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">;</span>
+          edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>jj<span class="hl opt">=</span>xadj<span class="hl opt">[</span>k<span class="hl opt">];</span> jj<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>k<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> jj<span class="hl opt">++) {</span>
+            kk <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>jj<span class="hl opt">];</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>kk<span class="hl opt">] !=</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+              edegrees<span class="hl opt">[</span>where<span class="hl opt">[</span>kk<span class="hl opt">]] +=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">];</span>
+            <span class="hl kwa">else</span> <span class="hl opt">{</span>
+              oldgain <span class="hl opt">=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">];</span>
+              rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+              <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>kk<span class="hl opt">] == -</span><span class="hl num">1</span> <span class="hl opt">||</span> moved<span class="hl opt">[</span>kk<span class="hl opt">] == -(</span><span class="hl num">2</span><span class="hl opt">+</span>to<span class="hl opt">))</span>
+                <span class="hl kwd">PQueueUpdate</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>to<span class="hl opt">],</span> kk<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> oldgain<span class="hl opt">+</span>vwgt<span class="hl opt">[</span>k<span class="hl opt">]);</span>
+            <span class="hl opt">}</span>
+          <span class="hl opt">}</span>
+
+          <span class="hl com">/* Insert the new vertex into the priority queue. Only one side! */</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">) {</span>
+            <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">[</span>to<span class="hl opt">],</span> k<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]-</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+            moved<span class="hl opt">[</span>k<span class="hl opt">] = -(</span><span class="hl num">2</span><span class="hl opt">+</span>to<span class="hl opt">);</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      mptr<span class="hl opt">[</span>nswaps<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">] =</span> nmind<span class="hl opt">;</span>
+
+      <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_MOVEINFO<span class="hl opt">,</span>
+            <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Moved %6d to %3d, Gain: %5d [%5d] [%4d %4d]</span> <span class="hl esc">\t</span><span class="hl str">[%5d %5d %5d]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> higain<span class="hl opt">,</span> to<span class="hl opt">,</span> g<span class="hl opt">[</span>to<span class="hl opt">],</span> g<span class="hl opt">[</span>other<span class="hl opt">],</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span>to<span class="hl opt">]],</span> vwgt<span class="hl opt">[</span>u<span class="hl opt">[</span>other<span class="hl opt">]],</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]));</span>
+
+    <span class="hl opt">}</span>
+
+
+    <span class="hl com">/****************************************************************</span>
+<span class="hl com">    * Roll back computation </span>
+<span class="hl com">    *****************************************************************/</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>nswaps<span class="hl opt">--;</span> nswaps<span class="hl opt">&gt;</span>mincutorder<span class="hl opt">;</span> nswaps<span class="hl opt">--) {</span>
+      higain <span class="hl opt">=</span> swaps<span class="hl opt">[</span>nswaps<span class="hl opt">];</span>
+
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodePartitionParams</span><span class="hl opt">(</span>graph<span class="hl opt">));</span>
+
+      to <span class="hl opt">=</span> where<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+      other <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+      <span class="hl kwd">INC_DEC</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span>to<span class="hl opt">],</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">]);</span>
+      where<span class="hl opt">[</span>higain<span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span>
+      <span class="hl kwd">BNDInsert</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> higain<span class="hl opt">);</span>
+
+      edegrees <span class="hl opt">=</span> rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">;</span>
+      edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+          rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+        <span class="hl kwa">else</span>
+          edegrees<span class="hl opt">[</span>where<span class="hl opt">[</span>k<span class="hl opt">]] +=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl com">/* Push nodes out of the separator */</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>mptr<span class="hl opt">[</span>nswaps<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>mptr<span class="hl opt">[</span>nswaps<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> mind<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">);</span>
+        where<span class="hl opt">[</span>k<span class="hl opt">] =</span> other<span class="hl opt">;</span>
+        <span class="hl kwd">INC_DEC</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]);</span>
+        <span class="hl kwd">BNDDelete</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> k<span class="hl opt">);</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>jj<span class="hl opt">=</span>xadj<span class="hl opt">[</span>k<span class="hl opt">];</span> jj<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>k<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> jj<span class="hl opt">++) {</span>
+          kk <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>jj<span class="hl opt">];</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>kk<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+            rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>mincut <span class="hl opt">==</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]);</span>
+
+    <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+      <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;</span><span class="hl esc">\t</span><span class="hl str">Minimum sep: %6d at %5d, PWGTS: [%6d %6d], NBND: %6d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> mincut<span class="hl opt">,</span> mincutorder<span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> nbnd<span class="hl opt">));</span>
+
+    graph<span class="hl opt">-&gt;</span>mincut <span class="hl opt">=</span> mincut<span class="hl opt">;</span>
+    graph<span class="hl opt">-&gt;</span>nbnd <span class="hl opt">=</span> nbnd<span class="hl opt">;</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>mincutorder <span class="hl opt">== -</span><span class="hl num">1</span> <span class="hl opt">||</span> mincut <span class="hl opt">&gt;=</span> initcut<span class="hl opt">)</span>
+      <span class="hl kwa">break</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwd">PQueueFree</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+  <span class="hl kwd">PQueueFree</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl com">/*************************************************************************</span>
+<span class="hl com">* This function performs a node-based FM refinement. This is the </span>
+<span class="hl com">* one-way version </span>
+<span class="hl com">**************************************************************************/</span>
+<span class="hl kwb">void</span> <span class="hl kwd">FM_2WayNodeRefine_OneSided</span><span class="hl opt">(</span>CtrlType <span class="hl opt">*</span>ctrl<span class="hl opt">,</span> GraphType <span class="hl opt">*</span>graph<span class="hl opt">,</span> <span class="hl kwb">float</span> ubfactor<span class="hl opt">,</span> <span class="hl kwb">int</span> npasses<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  <span class="hl kwb">int</span> i<span class="hl opt">,</span> ii<span class="hl opt">,</span> j<span class="hl opt">,</span> k<span class="hl opt">,</span> jj<span class="hl opt">,</span> kk<span class="hl opt">,</span> nvtxs<span class="hl opt">,</span> nbnd<span class="hl opt">,</span> nswaps<span class="hl opt">,</span> nmind<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>xadj<span class="hl opt">, *</span>vwgt<span class="hl opt">, *</span>adjncy<span class="hl opt">, *</span>where<span class="hl opt">, *</span>pwgts<span class="hl opt">, *</span>edegrees<span class="hl opt">, *</span>bndind<span class="hl opt">, *</span>bndptr<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>mptr<span class="hl opt">, *</span>mind<span class="hl opt">, *</span>swaps<span class="hl opt">, *</span>perm<span class="hl opt">;</span>
+  PQueueType parts<span class="hl opt">;</span> 
+  NRInfoType <span class="hl opt">*</span>rinfo<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> higain<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> mincut<span class="hl opt">,</span> initcut<span class="hl opt">,</span> mincutorder<span class="hl opt">;</span>	
+  <span class="hl kwb">int</span> pass<span class="hl opt">,</span> to<span class="hl opt">,</span> other<span class="hl opt">,</span> limit<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> badmaxpwgt<span class="hl opt">,</span> mindiff<span class="hl opt">,</span> newdiff<span class="hl opt">;</span>
+
+  nvtxs <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">;</span>
+  xadj <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>xadj<span class="hl opt">;</span>
+  adjncy <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>adjncy<span class="hl opt">;</span>
+  vwgt <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>vwgt<span class="hl opt">;</span>
+
+  bndind <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndind<span class="hl opt">;</span>
+  bndptr <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndptr<span class="hl opt">;</span>
+  where <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>where<span class="hl opt">;</span>
+  pwgts <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>pwgts<span class="hl opt">;</span>
+  rinfo <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nrinfo<span class="hl opt">;</span>
+
+  <span class="hl kwd">PQueueInit</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">,</span> nvtxs<span class="hl opt">,</span> <span class="hl kwd">ComputeMaxNodeGain</span><span class="hl opt">(</span>nvtxs<span class="hl opt">,</span> xadj<span class="hl opt">,</span> adjncy<span class="hl opt">,</span> vwgt<span class="hl opt">));</span>
+
+  perm <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  swaps <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  mptr <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  mind <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+
+  <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+    <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Partitions-N1: [%6d %6d] Nv-Nb[%6d %6d]. ISep: %6d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>mincut<span class="hl opt">));</span>
+
+  badmaxpwgt <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">)(</span>ubfactor<span class="hl opt">*(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">])/</span><span class="hl num">2</span><span class="hl opt">);</span>
+
+  to <span class="hl opt">= (</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &lt;</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">1</span> <span class="hl opt">:</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>pass<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> pass<span class="hl opt">&lt;</span>npasses<span class="hl opt">;</span> pass<span class="hl opt">++) {</span>
+    other <span class="hl opt">=</span> to<span class="hl opt">;</span> 
+    to <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+
+    <span class="hl kwd">PQueueReset</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">);</span>
+
+    mincutorder <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    initcut <span class="hl opt">=</span> mincut <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>mincut<span class="hl opt">;</span>
+    nbnd <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">;</span>
+
+    <span class="hl kwd">RandomPermute</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> perm<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>ii<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> ii<span class="hl opt">&lt;</span>nbnd<span class="hl opt">;</span> ii<span class="hl opt">++) {</span>
+      i <span class="hl opt">=</span> bndind<span class="hl opt">[</span>perm<span class="hl opt">[</span>ii<span class="hl opt">]];</span>
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>i<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">);</span>
+      <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">,</span> i<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>i<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>i<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodeBnd</span><span class="hl opt">(</span>graph<span class="hl opt">,</span> nbnd<span class="hl opt">));</span>
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodePartitionParams</span><span class="hl opt">(</span>graph<span class="hl opt">));</span>
+
+    limit <span class="hl opt">= (</span>ctrl<span class="hl opt">-&gt;</span>oflags<span class="hl opt">&amp;</span>OFLAG_COMPRESS ? <span class="hl kwd">amin</span><span class="hl opt">(</span><span class="hl num">5</span><span class="hl opt">*</span>nbnd<span class="hl opt">,</span> <span class="hl num">400</span><span class="hl opt">) :</span> <span class="hl kwd">amin</span><span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">*</span>nbnd<span class="hl opt">,</span> <span class="hl num">300</span><span class="hl opt">));</span>
+
+    <span class="hl com">/******************************************************</span>
+<span class="hl com">    * Get into the FM loop</span>
+<span class="hl com">    *******************************************************/</span>
+    mptr<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> nmind <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    mindiff <span class="hl opt">=</span> <span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]-</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>nswaps<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> nswaps<span class="hl opt">&lt;</span>nvtxs<span class="hl opt">;</span> nswaps<span class="hl opt">++) {</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">((</span>higain <span class="hl opt">=</span> <span class="hl kwd">PQueueGetMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">)) == -</span><span class="hl num">1</span><span class="hl opt">)</span>
+        <span class="hl kwa">break</span><span class="hl opt">;</span>
+
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>higain<span class="hl opt">] != -</span><span class="hl num">1</span><span class="hl opt">);</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span>to<span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">] &gt;</span> badmaxpwgt<span class="hl opt">)</span>
+        <span class="hl kwa">break</span><span class="hl opt">;</span>  <span class="hl com">/* No point going any further. Balance will be bad */</span>
+
+      pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] -= (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+
+      newdiff <span class="hl opt">=</span> <span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span>to<span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">] - (</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]));</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] &lt;</span> mincut <span class="hl opt">|| (</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] ==</span> mincut <span class="hl opt">&amp;&amp;</span> newdiff <span class="hl opt">&lt;</span> mindiff<span class="hl opt">)) {</span>
+        mincut <span class="hl opt">=</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+        mincutorder <span class="hl opt">=</span> nswaps<span class="hl opt">;</span>
+        mindiff <span class="hl opt">=</span> newdiff<span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>nswaps <span class="hl opt">-</span> mincutorder <span class="hl opt">&gt;</span> limit<span class="hl opt">) {</span>
+          pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] += (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+          <span class="hl kwa">break</span><span class="hl opt">;</span> <span class="hl com">/* No further improvement, break out */</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl kwd">BNDDelete</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> higain<span class="hl opt">);</span>
+      pwgts<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+      where<span class="hl opt">[</span>higain<span class="hl opt">] =</span> to<span class="hl opt">;</span>
+      swaps<span class="hl opt">[</span>nswaps<span class="hl opt">] =</span> higain<span class="hl opt">;</span>  
+
+
+      <span class="hl com">/**********************************************************</span>
+<span class="hl com">      * Update the degrees of the affected nodes</span>
+<span class="hl com">      ***********************************************************/</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">) {</span> <span class="hl com">/* For the in-separator vertices modify their edegree[to] */</span>
+          rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> other<span class="hl opt">) {</span> <span class="hl com">/* This vertex is pulled into the separator */</span>
+          <span class="hl kwd">ASSERTP</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">, (</span><span class="hl str">&quot;%d %d %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> k<span class="hl opt">,</span> bndptr<span class="hl opt">[</span>k<span class="hl opt">],</span> where<span class="hl opt">[</span>k<span class="hl opt">]));</span>
+          <span class="hl kwd">BNDInsert</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> k<span class="hl opt">);</span>
+
+          mind<span class="hl opt">[</span>nmind<span class="hl opt">++] =</span> k<span class="hl opt">;</span>  <span class="hl com">/* Keep track for rollback */</span>
+          where<span class="hl opt">[</span>k<span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span>
+          pwgts<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+
+          edegrees <span class="hl opt">=</span> rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">;</span>
+          edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>jj<span class="hl opt">=</span>xadj<span class="hl opt">[</span>k<span class="hl opt">];</span> jj<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>k<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> jj<span class="hl opt">++) {</span>
+            kk <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>jj<span class="hl opt">];</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>kk<span class="hl opt">] !=</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+              edegrees<span class="hl opt">[</span>where<span class="hl opt">[</span>kk<span class="hl opt">]] +=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">];</span>
+            <span class="hl kwa">else</span> <span class="hl opt">{</span>
+              oldgain <span class="hl opt">=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">];</span>
+              rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+
+              <span class="hl com">/* Since the moves are one-sided this vertex has not been moved yet */</span>
+              <span class="hl kwd">PQueueUpdateUp</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">,</span> kk<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> oldgain<span class="hl opt">+</span>vwgt<span class="hl opt">[</span>k<span class="hl opt">]);</span> 
+            <span class="hl opt">}</span>
+          <span class="hl opt">}</span>
+
+          <span class="hl com">/* Insert the new vertex into the priority queue. Safe due to one-sided moves */</span>
+          <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">,</span> k<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]-</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      mptr<span class="hl opt">[</span>nswaps<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">] =</span> nmind<span class="hl opt">;</span>
+
+
+      <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_MOVEINFO<span class="hl opt">,</span>
+            <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Moved %6d to %3d, Gain: %5d [%5d]</span> <span class="hl esc">\t</span><span class="hl str">[%5d %5d %5d] [%3d %2d]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> 
+                       higain<span class="hl opt">,</span> to<span class="hl opt">, (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]),</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> nswaps<span class="hl opt">,</span> limit<span class="hl opt">));</span>
+
+    <span class="hl opt">}</span>
+
+
+    <span class="hl com">/****************************************************************</span>
+<span class="hl com">    * Roll back computation </span>
+<span class="hl com">    *****************************************************************/</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>nswaps<span class="hl opt">--;</span> nswaps<span class="hl opt">&gt;</span>mincutorder<span class="hl opt">;</span> nswaps<span class="hl opt">--) {</span>
+      higain <span class="hl opt">=</span> swaps<span class="hl opt">[</span>nswaps<span class="hl opt">];</span>
+
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodePartitionParams</span><span class="hl opt">(</span>graph<span class="hl opt">));</span>
+      <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>higain<span class="hl opt">] ==</span> to<span class="hl opt">);</span>
+
+      <span class="hl kwd">INC_DEC</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span>to<span class="hl opt">],</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">]);</span>
+      where<span class="hl opt">[</span>higain<span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span>
+      <span class="hl kwd">BNDInsert</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> higain<span class="hl opt">);</span>
+
+      edegrees <span class="hl opt">=</span> rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">;</span>
+      edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+          rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+        <span class="hl kwa">else</span>
+          edegrees<span class="hl opt">[</span>where<span class="hl opt">[</span>k<span class="hl opt">]] +=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl com">/* Push nodes out of the separator */</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>mptr<span class="hl opt">[</span>nswaps<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>mptr<span class="hl opt">[</span>nswaps<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+        k <span class="hl opt">=</span> mind<span class="hl opt">[</span>j<span class="hl opt">];</span>
+        <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">);</span>
+        where<span class="hl opt">[</span>k<span class="hl opt">] =</span> other<span class="hl opt">;</span>
+        <span class="hl kwd">INC_DEC</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]);</span>
+        <span class="hl kwd">BNDDelete</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> k<span class="hl opt">);</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>jj<span class="hl opt">=</span>xadj<span class="hl opt">[</span>k<span class="hl opt">];</span> jj<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>k<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> jj<span class="hl opt">++) {</span>
+          kk <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>jj<span class="hl opt">];</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>kk<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+            rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>mincut <span class="hl opt">==</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]);</span>
+
+    <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+      <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;</span><span class="hl esc">\t</span><span class="hl str">Minimum sep: %6d at %5d, PWGTS: [%6d %6d], NBND: %6d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> mincut<span class="hl opt">,</span> mincutorder<span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> nbnd<span class="hl opt">));</span>
+
+    graph<span class="hl opt">-&gt;</span>mincut <span class="hl opt">=</span> mincut<span class="hl opt">;</span>
+    graph<span class="hl opt">-&gt;</span>nbnd <span class="hl opt">=</span> nbnd<span class="hl opt">;</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>pass<span class="hl opt">%</span><span class="hl num">2</span> <span class="hl opt">==</span> <span class="hl num">1</span> <span class="hl opt">&amp;&amp; (</span>mincutorder <span class="hl opt">== -</span><span class="hl num">1</span> <span class="hl opt">||</span> mincut <span class="hl opt">&gt;=</span> initcut<span class="hl opt">))</span>
+      <span class="hl kwa">break</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwd">PQueueFree</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">);</span>
+
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+
+
+<span class="hl com">/*************************************************************************</span>
+<span class="hl com">* This function performs a node-based FM refinement </span>
+<span class="hl com">**************************************************************************/</span>
+<span class="hl kwb">void</span> <span class="hl kwd">FM_2WayNodeBalance</span><span class="hl opt">(</span>CtrlType <span class="hl opt">*</span>ctrl<span class="hl opt">,</span> GraphType <span class="hl opt">*</span>graph<span class="hl opt">,</span> <span class="hl kwb">float</span> ubfactor<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  <span class="hl kwb">int</span> i<span class="hl opt">,</span> ii<span class="hl opt">,</span> j<span class="hl opt">,</span> k<span class="hl opt">,</span> jj<span class="hl opt">,</span> kk<span class="hl opt">,</span> nvtxs<span class="hl opt">,</span> nbnd<span class="hl opt">,</span> nswaps<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>xadj<span class="hl opt">, *</span>vwgt<span class="hl opt">, *</span>adjncy<span class="hl opt">, *</span>where<span class="hl opt">, *</span>pwgts<span class="hl opt">, *</span>edegrees<span class="hl opt">, *</span>bndind<span class="hl opt">, *</span>bndptr<span class="hl opt">;</span>
+  idxtype <span class="hl opt">*</span>perm<span class="hl opt">, *</span>moved<span class="hl opt">;</span>
+  PQueueType parts<span class="hl opt">;</span> 
+  NRInfoType <span class="hl opt">*</span>rinfo<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> higain<span class="hl opt">,</span> oldgain<span class="hl opt">;</span>	
+  <span class="hl kwb">int</span> pass<span class="hl opt">,</span> to<span class="hl opt">,</span> other<span class="hl opt">;</span>
+
+  nvtxs <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">;</span>
+  xadj <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>xadj<span class="hl opt">;</span>
+  adjncy <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>adjncy<span class="hl opt">;</span>
+  vwgt <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>vwgt<span class="hl opt">;</span>
+
+  bndind <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndind<span class="hl opt">;</span>
+  bndptr <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>bndptr<span class="hl opt">;</span>
+  where <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>where<span class="hl opt">;</span>
+  pwgts <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>pwgts<span class="hl opt">;</span>
+  rinfo <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nrinfo<span class="hl opt">;</span>
+
+  <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]-</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]) &lt; (</span><span class="hl kwb">int</span><span class="hl opt">)((</span>ubfactor<span class="hl opt">-</span><span class="hl num">1.0</span><span class="hl opt">)*(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">])))</span>
+    <span class="hl kwa">return</span><span class="hl opt">;</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">abs</span><span class="hl opt">(</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]-</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]) &lt;</span> <span class="hl num">3</span><span class="hl opt">*</span><span class="hl kwd">idxsum</span><span class="hl opt">(</span>nvtxs<span class="hl opt">,</span> vwgt<span class="hl opt">)/</span>nvtxs<span class="hl opt">)</span>
+    <span class="hl kwa">return</span><span class="hl opt">;</span>
+
+  to <span class="hl opt">= (</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] &lt;</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]</span> ? <span class="hl num">0</span> <span class="hl opt">:</span> <span class="hl num">1</span><span class="hl opt">);</span> 
+  other <span class="hl opt">= (</span>to<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">)%</span><span class="hl num">2</span><span class="hl opt">;</span>
+
+  <span class="hl kwd">PQueueInit</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">,</span> nvtxs<span class="hl opt">,</span> <span class="hl kwd">ComputeMaxNodeGain</span><span class="hl opt">(</span>nvtxs<span class="hl opt">,</span> xadj<span class="hl opt">,</span> adjncy<span class="hl opt">,</span> vwgt<span class="hl opt">));</span>
+
+  perm <span class="hl opt">=</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  moved <span class="hl opt">=</span> <span class="hl kwd">idxset</span><span class="hl opt">(</span>nvtxs<span class="hl opt">, -</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwd">idxwspacemalloc</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">));</span>
+
+  <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+    <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Partitions: [%6d %6d] Nv-Nb[%6d %6d]. ISep: %6d [B]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> graph<span class="hl opt">-&gt;</span>nvtxs<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">,</span> graph<span class="hl opt">-&gt;</span>mincut<span class="hl opt">));</span>
+
+  nbnd <span class="hl opt">=</span> graph<span class="hl opt">-&gt;</span>nbnd<span class="hl opt">;</span>
+  <span class="hl kwd">RandomPermute</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> perm<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>ii<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> ii<span class="hl opt">&lt;</span>nbnd<span class="hl opt">;</span> ii<span class="hl opt">++) {</span>
+    i <span class="hl opt">=</span> bndind<span class="hl opt">[</span>perm<span class="hl opt">[</span>ii<span class="hl opt">]];</span>
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>where<span class="hl opt">[</span>i<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">);</span>
+    <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">,</span> i<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>i<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>i<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodeBnd</span><span class="hl opt">(</span>graph<span class="hl opt">,</span> nbnd<span class="hl opt">));</span>
+  <span class="hl kwd">ASSERT</span><span class="hl opt">(</span><span class="hl kwd">CheckNodePartitionParams</span><span class="hl opt">(</span>graph<span class="hl opt">));</span>
+
+  <span class="hl com">/******************************************************</span>
+<span class="hl com">  * Get into the FM loop</span>
+<span class="hl com">  *******************************************************/</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>nswaps<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> nswaps<span class="hl opt">&lt;</span>nvtxs<span class="hl opt">;</span> nswaps<span class="hl opt">++) {</span>
+    <span class="hl kwa">if</span> <span class="hl opt">((</span>higain <span class="hl opt">=</span> <span class="hl kwd">PQueueGetMax</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">)) == -</span><span class="hl num">1</span><span class="hl opt">)</span>
+      <span class="hl kwa">break</span><span class="hl opt">;</span>
+
+    moved<span class="hl opt">[</span>higain<span class="hl opt">] =</span> <span class="hl num">1</span><span class="hl opt">;</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">] -</span> rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] &lt; (</span>pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]+</span>pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">])/</span><span class="hl num">2</span><span class="hl opt">)</span> 
+      <span class="hl kwa">continue</span><span class="hl opt">;</span>
+<span class="hl ppc">#ifdef XXX</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span>other<span class="hl opt">] -</span> rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] &lt;</span> pwgts<span class="hl opt">[</span>to<span class="hl opt">]+</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">])</span> 
+      <span class="hl kwa">break</span><span class="hl opt">;</span>
+<span class="hl ppc">#endif</span>
+
+    <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>higain<span class="hl opt">] != -</span><span class="hl num">1</span><span class="hl opt">);</span>
+
+    pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] -= (</span>vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+
+    <span class="hl kwd">BNDDelete</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> higain<span class="hl opt">);</span>
+    pwgts<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+    where<span class="hl opt">[</span>higain<span class="hl opt">] =</span> to<span class="hl opt">;</span>
+
+    <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_MOVEINFO<span class="hl opt">,</span>
+          <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Moved %6d to %3d, Gain: %3d,</span> <span class="hl esc">\t</span><span class="hl str">[%5d %5d %5d]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> higain<span class="hl opt">,</span> to<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>higain<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]));</span>
+
+
+    <span class="hl com">/**********************************************************</span>
+<span class="hl com">    * Update the degrees of the affected nodes</span>
+<span class="hl com">    ***********************************************************/</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>higain<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++) {</span>
+      k <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>j<span class="hl opt">];</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> <span class="hl num">2</span><span class="hl opt">) {</span> <span class="hl com">/* For the in-separator vertices modify their edegree[to] */</span>
+        rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>to<span class="hl opt">] +=</span> vwgt<span class="hl opt">[</span>higain<span class="hl opt">];</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>k<span class="hl opt">] ==</span> other<span class="hl opt">) {</span> <span class="hl com">/* This vertex is pulled into the separator */</span>
+        <span class="hl kwd">ASSERTP</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>k<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">, (</span><span class="hl str">&quot;%d %d %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> k<span class="hl opt">,</span> bndptr<span class="hl opt">[</span>k<span class="hl opt">],</span> where<span class="hl opt">[</span>k<span class="hl opt">]));</span>
+        <span class="hl kwd">BNDInsert</span><span class="hl opt">(</span>nbnd<span class="hl opt">,</span> bndind<span class="hl opt">,</span> bndptr<span class="hl opt">,</span> k<span class="hl opt">);</span>
+
+        where<span class="hl opt">[</span>k<span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span>
+        pwgts<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+
+        edegrees <span class="hl opt">=</span> rinfo<span class="hl opt">[</span>k<span class="hl opt">].</span>edegrees<span class="hl opt">;</span>
+        edegrees<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> edegrees<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>jj<span class="hl opt">=</span>xadj<span class="hl opt">[</span>k<span class="hl opt">];</span> jj<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>k<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> jj<span class="hl opt">++) {</span>
+          kk <span class="hl opt">=</span> adjncy<span class="hl opt">[</span>jj<span class="hl opt">];</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>where<span class="hl opt">[</span>kk<span class="hl opt">] !=</span> <span class="hl num">2</span><span class="hl opt">)</span> 
+            edegrees<span class="hl opt">[</span>where<span class="hl opt">[</span>kk<span class="hl opt">]] +=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">];</span>
+          <span class="hl kwa">else</span> <span class="hl opt">{</span>
+            <span class="hl kwd">ASSERT</span><span class="hl opt">(</span>bndptr<span class="hl opt">[</span>kk<span class="hl opt">] != -</span><span class="hl num">1</span><span class="hl opt">);</span>
+            oldgain <span class="hl opt">=</span> vwgt<span class="hl opt">[</span>kk<span class="hl opt">]-</span>rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">];</span>
+            rinfo<span class="hl opt">[</span>kk<span class="hl opt">].</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">] -=</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">];</span>
+
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>moved<span class="hl opt">[</span>kk<span class="hl opt">] == -</span><span class="hl num">1</span><span class="hl opt">)</span>
+              <span class="hl kwd">PQueueUpdateUp</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">,</span> kk<span class="hl opt">,</span> oldgain<span class="hl opt">,</span> oldgain<span class="hl opt">+</span>vwgt<span class="hl opt">[</span>k<span class="hl opt">]);</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+
+        <span class="hl com">/* Insert the new vertex into the priority queue */</span>
+        <span class="hl kwd">PQueueInsert</span><span class="hl opt">(&amp;</span>parts<span class="hl opt">,</span> k<span class="hl opt">,</span> vwgt<span class="hl opt">[</span>k<span class="hl opt">]-</span>edegrees<span class="hl opt">[</span>other<span class="hl opt">]);</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>pwgts<span class="hl opt">[</span>to<span class="hl opt">] &gt;</span> pwgts<span class="hl opt">[</span>other<span class="hl opt">])</span>
+      <span class="hl kwa">break</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwd">IFSET</span><span class="hl opt">(</span>ctrl<span class="hl opt">-&gt;</span>dbglvl<span class="hl opt">,</span> DBG_REFINE<span class="hl opt">,</span>
+    <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;</span><span class="hl esc">\t</span><span class="hl str">Balanced sep: %6d at %4d, PWGTS: [%6d %6d], NBND: %6d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> nswaps<span class="hl opt">,</span> pwgts<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pwgts<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> nbnd<span class="hl opt">));</span>
+
+  graph<span class="hl opt">-&gt;</span>mincut <span class="hl opt">=</span> pwgts<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+  graph<span class="hl opt">-&gt;</span>nbnd <span class="hl opt">=</span> nbnd<span class="hl opt">;</span>
+
+
+  <span class="hl kwd">PQueueFree</span><span class="hl opt">(</span>ctrl<span class="hl opt">, &amp;</span>parts<span class="hl opt">);</span>
+
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+  <span class="hl kwd">idxwspacefree</span><span class="hl opt">(</span>ctrl<span class="hl opt">,</span> nvtxs<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl com">/*************************************************************************</span>
+<span class="hl com">* This function computes the maximum possible gain for a vertex</span>
+<span class="hl com">**************************************************************************/</span>
+<span class="hl kwb">int</span> <span class="hl kwd">ComputeMaxNodeGain</span><span class="hl opt">(</span><span class="hl kwb">int</span> nvtxs<span class="hl opt">,</span> idxtype <span class="hl opt">*</span>xadj<span class="hl opt">,</span> idxtype <span class="hl opt">*</span>adjncy<span class="hl opt">,</span> idxtype <span class="hl opt">*</span>vwgt<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  <span class="hl kwb">int</span> i<span class="hl opt">,</span> j<span class="hl opt">,</span> k<span class="hl opt">,</span> max<span class="hl opt">;</span>
+
+  max <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>j<span class="hl opt">=</span>xadj<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++)</span>
+    max <span class="hl opt">+=</span> vwgt<span class="hl opt">[</span>adjncy<span class="hl opt">[</span>j<span class="hl opt">]];</span>
+
+  <span class="hl kwa">for</span> <span class="hl opt">(</span>i<span class="hl opt">=</span><span class="hl num">1</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span>nvtxs<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>k<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">,</span> j<span class="hl opt">=</span>xadj<span class="hl opt">[</span>i<span class="hl opt">];</span> j<span class="hl opt">&lt;</span>xadj<span class="hl opt">[</span>i<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span> j<span class="hl opt">++)</span>
+      k <span class="hl opt">+=</span> vwgt<span class="hl opt">[</span>adjncy<span class="hl opt">[</span>j<span class="hl opt">]];</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>max <span class="hl opt">&lt;</span> k<span class="hl opt">)</span>
+      max <span class="hl opt">=</span> k<span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwa">return</span> max<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+   
+
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->

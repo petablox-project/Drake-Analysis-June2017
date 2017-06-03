@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/libbot/bot2-lcmgl/src/bot_lcmgl_render/lcmgl_bot_renderer.c</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl ppc">#include &lt;lcm/lcm.h&gt;</span>
+
+<span class="hl ppc">#include &lt;bot_core/bot_core.h&gt;</span>
+<span class="hl ppc">#include &lt;bot_vis/bot_vis.h&gt;</span>
+<span class="hl ppc">#include &lt;lcmtypes/bot_lcmgl_data_t.h&gt;</span>
+
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;lcmgl_decode.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;lcmgl_bot_renderer.h&quot;</span><span class="hl ppc"></span>
+
+<span class="hl kwc">typedef</span> <span class="hl kwb">struct</span>
+<span class="hl opt">{</span>
+    GPtrArray <span class="hl opt">*</span>backbuffer<span class="hl opt">;</span>
+    GPtrArray <span class="hl opt">*</span>frontbuffer<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> enabled<span class="hl opt">;</span>
+<span class="hl opt">}</span> lcmgl_channel_t<span class="hl opt">;</span>
+
+<span class="hl kwc">typedef</span> <span class="hl kwb">struct</span> _BotLcmglRenderer <span class="hl opt">{</span>
+    BotRenderer renderer<span class="hl opt">;</span>
+    BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">;</span>
+    BotViewer   <span class="hl opt">*</span>viewer<span class="hl opt">;</span>
+    lcm_t     <span class="hl opt">*</span>lcm<span class="hl opt">;</span>
+
+    GHashTable <span class="hl opt">*</span>channels<span class="hl opt">;</span>
+
+<span class="hl opt">}</span> BotLcmglRenderer<span class="hl opt">;</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">my_free</span><span class="hl opt">(</span> BotRenderer <span class="hl opt">*</span>renderer <span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    BotLcmglRenderer <span class="hl opt">*</span>self <span class="hl opt">= (</span>BotLcmglRenderer<span class="hl opt">*)</span> renderer<span class="hl opt">;</span>
+
+    <span class="hl kwd">free</span><span class="hl opt">(</span> self <span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">my_draw</span><span class="hl opt">(</span> BotViewer <span class="hl opt">*</span>viewer<span class="hl opt">,</span> BotRenderer <span class="hl opt">*</span>renderer <span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl slc">//Enable transparency</span>
+    <span class="hl kwd">glEnable</span><span class="hl opt">(</span>GL_BLEND<span class="hl opt">);</span>
+    <span class="hl kwd">glEnable</span><span class="hl opt">(</span>GL_DEPTH_TEST<span class="hl opt">);</span>
+
+    BotLcmglRenderer <span class="hl opt">*</span>self <span class="hl opt">= (</span>BotLcmglRenderer<span class="hl opt">*)</span> renderer<span class="hl opt">-&gt;</span>user<span class="hl opt">;</span>
+
+    <span class="hl slc">// iterate over each channel</span>
+    GList <span class="hl opt">*</span>keys <span class="hl opt">=</span> <span class="hl kwd">bot_g_hash_table_get_keys</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>channels<span class="hl opt">);</span>
+
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>GList <span class="hl opt">*</span>kiter <span class="hl opt">=</span> keys<span class="hl opt">;</span> kiter<span class="hl opt">;</span> kiter<span class="hl opt">=</span>kiter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+        lcmgl_channel_t <span class="hl opt">*</span>chan <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>channels<span class="hl opt">,</span>
+                                                   kiter<span class="hl opt">-&gt;</span>data<span class="hl opt">);</span>
+        <span class="hl kwd">glPushMatrix</span><span class="hl opt">();</span>
+        <span class="hl kwd">glPushAttrib</span><span class="hl opt">(</span>GL_ENABLE_BIT<span class="hl opt">);</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>enabled<span class="hl opt">) {</span>
+            <span class="hl slc">// iterate over all the messages received for this channel</span>
+            <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+                bot_lcmgl_data_t <span class="hl opt">*</span>data <span class="hl opt">=</span>
+                    <span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">,</span> i<span class="hl opt">);</span>
+
+                <span class="hl kwd">bot_lcmgl_decode</span><span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>data<span class="hl opt">,</span> data<span class="hl opt">-&gt;</span>datalen<span class="hl opt">);</span>
+            <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwd">glPopAttrib</span> <span class="hl opt">();</span>
+        <span class="hl kwd">glPopMatrix</span><span class="hl opt">();</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwd">g_list_free</span> <span class="hl opt">(</span>keys<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">on_lcmgl_data</span> <span class="hl opt">(</span><span class="hl kwb">const</span> lcm_recv_buf_t <span class="hl opt">*</span>rbuf<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>channel<span class="hl opt">,</span>
+        <span class="hl kwb">const</span> bot_lcmgl_data_t <span class="hl opt">*</span>_msg<span class="hl opt">,</span> <span class="hl kwb">void</span> <span class="hl opt">*</span>user_data <span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    BotLcmglRenderer <span class="hl opt">*</span>self <span class="hl opt">= (</span>BotLcmglRenderer<span class="hl opt">*)</span> user_data<span class="hl opt">;</span>
+
+    lcmgl_channel_t <span class="hl opt">*</span>chan <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>channels<span class="hl opt">,</span> _msg<span class="hl opt">-&gt;</span>name<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span>chan<span class="hl opt">) {</span>
+        chan <span class="hl opt">= (</span>lcmgl_channel_t<span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>lcmgl_channel_t<span class="hl opt">));</span>
+        chan<span class="hl opt">-&gt;</span>enabled<span class="hl opt">=</span><span class="hl num">1</span><span class="hl opt">;</span>
+        <span class="hl slc">//chan-&gt;backbuffer = g_ptr_array_new();</span>
+        chan<span class="hl opt">-&gt;</span>frontbuffer <span class="hl opt">=</span> <span class="hl kwd">g_ptr_array_new</span><span class="hl opt">();</span>
+        <span class="hl kwd">g_hash_table_insert</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>channels<span class="hl opt">,</span> <span class="hl kwd">strdup</span><span class="hl opt">(</span>_msg<span class="hl opt">-&gt;</span>name<span class="hl opt">),</span> chan<span class="hl opt">);</span>
+        <span class="hl kwd">bot_gtk_param_widget_add_booleans</span> <span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span>
+                <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl kwd">strdup</span><span class="hl opt">(</span>_msg<span class="hl opt">-&gt;</span>name<span class="hl opt">),</span> <span class="hl num">1</span><span class="hl opt">,</span> NULL<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+
+<span class="hl ppc">#if 0</span>
+    <span class="hl kwb">int</span> current_scene <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>backbuffer<span class="hl opt">-&gt;</span>len <span class="hl opt">&gt;</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+        bot_lcmgl_data_t <span class="hl opt">*</span>ld <span class="hl opt">=</span> <span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>backbuffer<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+        current_scene <span class="hl opt">=</span> ld<span class="hl opt">-&gt;</span>scene<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// new scene?</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>current_scene <span class="hl opt">!=</span> _msg<span class="hl opt">-&gt;</span>scene<span class="hl opt">) {</span>
+
+        <span class="hl slc">// free objects in foreground buffer</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> i<span class="hl opt">++)</span>
+            <span class="hl kwd">bot_lcmgl_data_t_destroy</span><span class="hl opt">(</span><span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">,</span> i<span class="hl opt">));</span>
+        <span class="hl kwd">g_ptr_array_set_size</span><span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+        <span class="hl slc">// swap front and back buffers</span>
+        GPtrArray <span class="hl opt">*</span>tmp <span class="hl opt">=</span> chan<span class="hl opt">-&gt;</span>backbuffer<span class="hl opt">;</span>
+        chan<span class="hl opt">-&gt;</span>backbuffer <span class="hl opt">=</span> chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">;</span>
+        chan<span class="hl opt">-&gt;</span>frontbuffer <span class="hl opt">=</span> tmp<span class="hl opt">;</span>
+
+        <span class="hl kwd">bot_viewer_request_redraw</span><span class="hl opt">(</span> self<span class="hl opt">-&gt;</span>viewer <span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+<span class="hl ppc">#endif</span>
+
+    <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> i<span class="hl opt">++)</span>
+        <span class="hl kwd">bot_lcmgl_data_t_destroy</span><span class="hl opt">(</span><span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">,</span> i<span class="hl opt">));</span>
+    <span class="hl kwd">g_ptr_array_set_size</span> <span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">,</span> <span class="hl kwd">bot_lcmgl_data_t_copy</span><span class="hl opt">(</span>_msg<span class="hl opt">));</span>
+    <span class="hl kwd">bot_viewer_request_redraw</span><span class="hl opt">(</span> self<span class="hl opt">-&gt;</span>viewer <span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">on_param_widget_changed</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> <span class="hl kwb">void</span> <span class="hl opt">*</span>user<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    BotLcmglRenderer <span class="hl opt">*</span>self <span class="hl opt">= (</span>BotLcmglRenderer<span class="hl opt">*)</span> user<span class="hl opt">;</span>
+
+    <span class="hl slc">// iterate over each channel</span>
+    GList <span class="hl opt">*</span>keys <span class="hl opt">=</span> <span class="hl kwd">bot_g_hash_table_get_keys</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>channels<span class="hl opt">);</span>
+
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>GList <span class="hl opt">*</span>kiter<span class="hl opt">=</span>keys<span class="hl opt">;</span> kiter<span class="hl opt">;</span> kiter<span class="hl opt">=</span>kiter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+        lcmgl_channel_t <span class="hl opt">*</span>chan <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>channels<span class="hl opt">,</span>
+                                                   kiter<span class="hl opt">-&gt;</span>data<span class="hl opt">);</span>
+
+        chan<span class="hl opt">-&gt;</span>enabled <span class="hl opt">=</span> <span class="hl kwd">bot_gtk_param_widget_get_bool</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> kiter<span class="hl opt">-&gt;</span>data<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwd">g_list_free</span> <span class="hl opt">(</span>keys<span class="hl opt">);</span>
+
+    <span class="hl kwd">bot_viewer_request_redraw</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>viewer<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">on_clear_button</span><span class="hl opt">(</span>GtkWidget <span class="hl opt">*</span>button<span class="hl opt">,</span> BotLcmglRenderer <span class="hl opt">*</span>self<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span>self<span class="hl opt">-&gt;</span>viewer<span class="hl opt">)</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+
+    <span class="hl slc">// iterate over each channel</span>
+    GList <span class="hl opt">*</span>keys <span class="hl opt">=</span> <span class="hl kwd">bot_g_hash_table_get_keys</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>channels<span class="hl opt">);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>GList <span class="hl opt">*</span>kiter <span class="hl opt">=</span> keys<span class="hl opt">;</span> kiter<span class="hl opt">;</span> kiter <span class="hl opt">=</span> kiter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+        lcmgl_channel_t <span class="hl opt">*</span>chan <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>channels<span class="hl opt">,</span> kiter<span class="hl opt">-&gt;</span>data<span class="hl opt">);</span>
+        <span class="hl slc">// iterate over all the messages received for this channel</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> i<span class="hl opt">++)</span>
+            <span class="hl kwd">bot_lcmgl_data_t_destroy</span><span class="hl opt">(</span><span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">,</span> i<span class="hl opt">));</span>
+        <span class="hl kwd">g_ptr_array_set_size</span><span class="hl opt">(</span>chan<span class="hl opt">-&gt;</span>frontbuffer<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+    <span class="hl opt">}</span>
+    <span class="hl kwd">g_list_free</span><span class="hl opt">(</span>keys<span class="hl opt">);</span>
+
+    <span class="hl kwd">bot_viewer_request_redraw</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>viewer<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">bot_lcmgl_add_renderer_to_viewer</span><span class="hl opt">(</span>BotViewer<span class="hl opt">*</span> viewer<span class="hl opt">,</span> lcm_t<span class="hl opt">*</span> lcm<span class="hl opt">,</span> <span class="hl kwb">int</span> priority<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    BotLcmglRenderer <span class="hl opt">*</span>self <span class="hl opt">=</span>
+        <span class="hl opt">(</span>BotLcmglRenderer<span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>BotLcmglRenderer<span class="hl opt">));</span>
+
+    BotRenderer <span class="hl opt">*</span>renderer <span class="hl opt">= &amp;</span>self<span class="hl opt">-&gt;</span>renderer<span class="hl opt">;</span>
+
+    self<span class="hl opt">-&gt;</span>lcm <span class="hl opt">=</span> lcm<span class="hl opt">;</span>
+    self<span class="hl opt">-&gt;</span>viewer <span class="hl opt">=</span> viewer<span class="hl opt">;</span>
+    self<span class="hl opt">-&gt;</span>pw <span class="hl opt">=</span> <span class="hl kwd">BOT_GTK_PARAM_WIDGET</span><span class="hl opt">(</span><span class="hl kwd">bot_gtk_param_widget_new</span><span class="hl opt">());</span>
+
+    renderer<span class="hl opt">-&gt;</span>draw <span class="hl opt">=</span> my_draw<span class="hl opt">;</span>
+    renderer<span class="hl opt">-&gt;</span>destroy <span class="hl opt">=</span> my_free<span class="hl opt">;</span>
+    renderer<span class="hl opt">-&gt;</span>name <span class="hl opt">=</span> <span class="hl str">&quot;LCM GL&quot;</span><span class="hl opt">;</span>
+    renderer<span class="hl opt">-&gt;</span>widget <span class="hl opt">=</span> <span class="hl kwd">GTK_WIDGET</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">);</span>
+    renderer<span class="hl opt">-&gt;</span>enabled <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+    renderer<span class="hl opt">-&gt;</span>user <span class="hl opt">=</span> self<span class="hl opt">;</span>
+
+    self<span class="hl opt">-&gt;</span>channels <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_new</span><span class="hl opt">(</span>g_str_hash<span class="hl opt">,</span> g_str_equal<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_signal_connect</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span> <span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">),</span> <span class="hl str">&quot;changed&quot;</span><span class="hl opt">,</span>
+                      <span class="hl kwd">G_CALLBACK</span> <span class="hl opt">(</span>on_param_widget_changed<span class="hl opt">),</span> self<span class="hl opt">);</span>
+
+    <span class="hl kwd">bot_lcmgl_data_t_subscribe</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>lcm<span class="hl opt">,</span> <span class="hl str">&quot;LCMGL.*&quot;</span><span class="hl opt">,</span> on_lcmgl_data<span class="hl opt">,</span> self<span class="hl opt">);</span>
+
+    <span class="hl kwd">bot_viewer_add_renderer</span><span class="hl opt">(</span>viewer<span class="hl opt">,</span> renderer<span class="hl opt">,</span> priority<span class="hl opt">);</span>
+
+    GtkWidget <span class="hl opt">*</span>clear_button <span class="hl opt">=</span> <span class="hl kwd">gtk_button_new_with_label</span><span class="hl opt">(</span><span class="hl str">&quot;Clear All&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwd">gtk_box_pack_start</span><span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span><span class="hl opt">(</span>renderer<span class="hl opt">-&gt;</span>widget<span class="hl opt">),</span> clear_button<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl kwd">g_signal_connect</span><span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>clear_button<span class="hl opt">),</span> <span class="hl str">&quot;clicked&quot;</span><span class="hl opt">,</span> <span class="hl kwd">G_CALLBACK</span><span class="hl opt">(</span>on_clear_button<span class="hl opt">),</span> self<span class="hl opt">);</span>
+    <span class="hl kwd">gtk_widget_show_all</span><span class="hl opt">(</span>renderer<span class="hl opt">-&gt;</span>widget<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl com">/*</span>
+<span class="hl com"> * setup_renderer:</span>
+<span class="hl com"> * Generic renderer add function for use as a dynamically loaded plugin</span>
+<span class="hl com"> */</span>
+<span class="hl kwb">void</span> <span class="hl kwd">add_renderer_to_plugin_viewer</span><span class="hl opt">(</span>BotViewer <span class="hl opt">*</span>viewer<span class="hl opt">,</span> <span class="hl kwb">int</span> render_priority<span class="hl opt">){</span>
+  lcm_t <span class="hl opt">*</span> lcm <span class="hl opt">=</span> <span class="hl kwd">bot_lcm_get_global</span><span class="hl opt">(</span>NULL<span class="hl opt">);</span>
+  <span class="hl kwd">bot_lcmgl_add_renderer_to_viewer</span><span class="hl opt">(</span>viewer<span class="hl opt">,</span>lcm<span class="hl opt">,</span> render_priority<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->

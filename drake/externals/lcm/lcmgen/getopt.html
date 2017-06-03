@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/lcm/lcmgen/getopt.c</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl ppc">#include &lt;stdio.h&gt;</span>
+<span class="hl ppc">#include &lt;stdlib.h&gt;</span>
+<span class="hl ppc">#include &lt;assert.h&gt;</span>
+<span class="hl ppc">#include &lt;string.h&gt;</span>
+<span class="hl ppc">#include &lt;ctype.h&gt;</span>
+
+<span class="hl ppc">#ifdef WIN32</span>
+<span class="hl ppc">#include &lt;lcm/windows/WinPorting.h&gt;</span>
+<span class="hl ppc">#endif</span>
+
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;getopt.h&quot;</span><span class="hl ppc"></span>
+
+<span class="hl ppc">#define GOO_BOOL_TYPE 1</span>
+<span class="hl ppc">#define GOO_STRING_TYPE 2</span>
+
+<span class="hl ppc">#ifndef MAX</span>
+<span class="hl ppc">#define MAX(a,b) ((a)&gt;(b)?(a):(b))</span>
+<span class="hl ppc">#endif</span>
+
+getopt_t <span class="hl opt">*</span><span class="hl kwd">getopt_create</span><span class="hl opt">()</span>
+<span class="hl opt">{</span>
+    getopt_t <span class="hl opt">*</span>gopt <span class="hl opt">= (</span>getopt_t<span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>getopt_t<span class="hl opt">));</span>
+    gopt<span class="hl opt">-&gt;</span>lopts <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_new</span><span class="hl opt">(</span>g_str_hash<span class="hl opt">,</span> g_str_equal<span class="hl opt">);</span>
+    gopt<span class="hl opt">-&gt;</span>sopts <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_new</span><span class="hl opt">(</span>g_str_hash<span class="hl opt">,</span> g_str_equal<span class="hl opt">);</span>
+    gopt<span class="hl opt">-&gt;</span>options <span class="hl opt">=</span> <span class="hl kwd">g_ptr_array_new</span><span class="hl opt">();</span>
+    gopt<span class="hl opt">-&gt;</span>extraargs <span class="hl opt">=</span> <span class="hl kwd">g_ptr_array_new</span><span class="hl opt">();</span>
+
+    <span class="hl kwa">return</span> gopt<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">getopt_destroy</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>gopt<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl slc">// XXX We need to free the members</span>
+    <span class="hl kwd">g_hash_table_destroy</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>lopts<span class="hl opt">);</span>
+    <span class="hl kwd">g_hash_table_destroy</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>sopts<span class="hl opt">);</span>
+    <span class="hl kwd">g_ptr_array_free</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>options<span class="hl opt">,</span> TRUE<span class="hl opt">);</span>
+    <span class="hl kwd">g_ptr_array_free</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>extraargs<span class="hl opt">,</span> TRUE<span class="hl opt">);</span>
+
+    <span class="hl kwd">free</span><span class="hl opt">(</span>gopt<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl slc">// returns 1 if no error</span>
+<span class="hl kwb">int</span> <span class="hl kwd">getopt_parse</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>gopt<span class="hl opt">,</span> <span class="hl kwb">int</span> argc<span class="hl opt">,</span> <span class="hl kwb">char</span> <span class="hl opt">*</span>argv<span class="hl opt">[],</span> <span class="hl kwb">int</span> showErrors<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">int</span> okay <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+    GPtrArray <span class="hl opt">*</span>toks <span class="hl opt">=</span> <span class="hl kwd">g_ptr_array_new</span><span class="hl opt">();</span>
+
+    <span class="hl slc">// take the input stream and chop it up into tokens</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> argc<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        <span class="hl kwb">char</span> <span class="hl opt">*</span>arg <span class="hl opt">=</span> <span class="hl kwd">strdup</span><span class="hl opt">(</span>argv<span class="hl opt">[</span>i<span class="hl opt">]);</span>
+        <span class="hl kwb">char</span> <span class="hl opt">*</span>eq <span class="hl opt">=</span> <span class="hl kwd">strstr</span><span class="hl opt">(</span>arg<span class="hl opt">,</span> <span class="hl str">&quot;=&quot;</span><span class="hl opt">);</span>
+
+        <span class="hl slc">// no equal sign? Push the whole thing.</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>eq <span class="hl opt">==</span> NULL<span class="hl opt">) {</span>
+            <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>toks<span class="hl opt">,</span> <span class="hl kwd">strdup</span><span class="hl opt">(</span>arg<span class="hl opt">));</span>
+        <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+            <span class="hl slc">// there was an equal sign. Push the part</span>
+            <span class="hl slc">// before and after the equal sign</span>
+            <span class="hl kwb">char</span> <span class="hl opt">*</span>val <span class="hl opt">= &amp;</span>eq<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">];</span>
+            eq<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+            <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>toks<span class="hl opt">,</span> arg<span class="hl opt">);</span>
+
+            <span class="hl slc">// if the part after the equal sign is</span>
+            <span class="hl slc">// enclosed by quotation marks, strip them.</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>val<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]==</span><span class="hl str">'</span><span class="hl esc">\&quot;</span><span class="hl str">'</span><span class="hl opt">) {</span>
+                <span class="hl kwb">int</span> last <span class="hl opt">=</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>val<span class="hl opt">) -</span> <span class="hl num">1</span><span class="hl opt">;</span>
+                <span class="hl kwa">if</span> <span class="hl opt">(</span>val<span class="hl opt">[</span>last<span class="hl opt">]==</span><span class="hl str">'</span><span class="hl esc">\&quot;</span><span class="hl str">'</span><span class="hl opt">)</span>
+                    val<span class="hl opt">[</span>last<span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+                <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>toks<span class="hl opt">, &amp;</span>val<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+            <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+                <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>toks<span class="hl opt">,</span> val<span class="hl opt">);</span>
+            <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// now loop over the elements and evaluate the arguments</span>
+    <span class="hl kwb">unsigned int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwa">while</span> <span class="hl opt">(</span>i <span class="hl opt">&lt;</span> toks<span class="hl opt">-&gt;</span>len<span class="hl opt">) {</span>
+
+        <span class="hl kwb">char</span> <span class="hl opt">*</span>tok <span class="hl opt">= (</span><span class="hl kwb">char</span><span class="hl opt">*)</span> <span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>toks<span class="hl opt">,</span> i<span class="hl opt">);</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">strncmp</span><span class="hl opt">(</span>tok<span class="hl opt">,</span><span class="hl str">&quot;--&quot;</span><span class="hl opt">,</span> <span class="hl num">2</span><span class="hl opt">)) {</span>
+            <span class="hl kwb">char</span> <span class="hl opt">*</span>optname <span class="hl opt">= &amp;</span>tok<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+            getopt_option_t <span class="hl opt">*</span>goo <span class="hl opt">= (</span>getopt_option_t<span class="hl opt">*)</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>lopts<span class="hl opt">,</span> optname<span class="hl opt">);</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>goo <span class="hl opt">==</span> NULL<span class="hl opt">) {</span>
+                okay <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+                <span class="hl kwa">if</span> <span class="hl opt">(</span>showErrors<span class="hl opt">)</span>
+                    <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Unknown option --%s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> optname<span class="hl opt">);</span>
+                i<span class="hl opt">++;</span>
+                <span class="hl kwa">continue</span><span class="hl opt">;</span>
+            <span class="hl opt">}</span>
+
+            goo<span class="hl opt">-&gt;</span>was_specified <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>type <span class="hl opt">==</span> GOO_BOOL_TYPE<span class="hl opt">) {</span>
+                <span class="hl kwa">if</span> <span class="hl opt">((</span>i<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">) &lt;</span> toks<span class="hl opt">-&gt;</span>len<span class="hl opt">) {</span>
+                    <span class="hl kwb">char</span> <span class="hl opt">*</span>val <span class="hl opt">= (</span><span class="hl kwb">char</span><span class="hl opt">*)</span> <span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>toks<span class="hl opt">,</span> i<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+
+                    <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>val<span class="hl opt">,</span><span class="hl str">&quot;true&quot;</span><span class="hl opt">)) {</span>
+                        i<span class="hl opt">+=</span><span class="hl num">2</span><span class="hl opt">;</span>
+                        goo<span class="hl opt">-&gt;</span>svalue <span class="hl opt">=</span> <span class="hl str">&quot;true&quot;</span><span class="hl opt">;</span>
+                        <span class="hl kwa">continue</span><span class="hl opt">;</span>
+                    <span class="hl opt">}</span>
+                    <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>val<span class="hl opt">,</span><span class="hl str">&quot;false&quot;</span><span class="hl opt">)) {</span>
+                        i<span class="hl opt">+=</span><span class="hl num">2</span><span class="hl opt">;</span>
+                        goo<span class="hl opt">-&gt;</span>svalue <span class="hl opt">=</span> <span class="hl str">&quot;false&quot;</span><span class="hl opt">;</span>
+                        <span class="hl kwa">continue</span><span class="hl opt">;</span>
+                    <span class="hl opt">}</span>
+                <span class="hl opt">}</span>
+
+                goo<span class="hl opt">-&gt;</span>svalue <span class="hl opt">=</span> <span class="hl str">&quot;true&quot;</span><span class="hl opt">;</span>
+                i<span class="hl opt">++;</span>
+                <span class="hl kwa">continue</span><span class="hl opt">;</span>
+            <span class="hl opt">}</span>
+
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>type <span class="hl opt">==</span> GOO_STRING_TYPE<span class="hl opt">) {</span>
+                <span class="hl kwa">if</span> <span class="hl opt">((</span>i<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">) &lt;</span> toks<span class="hl opt">-&gt;</span>len<span class="hl opt">) {</span>
+                    <span class="hl kwb">char</span> <span class="hl opt">*</span>val <span class="hl opt">= (</span><span class="hl kwb">char</span><span class="hl opt">*)</span> <span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>toks<span class="hl opt">,</span> i<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+                    i<span class="hl opt">+=</span><span class="hl num">2</span><span class="hl opt">;</span>
+
+                    goo<span class="hl opt">-&gt;</span>svalue <span class="hl opt">=</span> <span class="hl kwd">strdup</span><span class="hl opt">(</span>val<span class="hl opt">);</span>
+                    <span class="hl kwa">continue</span><span class="hl opt">;</span>
+                <span class="hl opt">}</span>
+
+                okay <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+                <span class="hl kwa">if</span> <span class="hl opt">(</span>showErrors<span class="hl opt">)</span>
+                    <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Option %s requires a string argument.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>optname<span class="hl opt">);</span>
+            <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">strncmp</span><span class="hl opt">(</span>tok<span class="hl opt">,</span><span class="hl str">&quot;-&quot;</span><span class="hl opt">,</span><span class="hl num">1</span><span class="hl opt">) &amp;&amp;</span> <span class="hl kwd">strncmp</span><span class="hl opt">(</span>tok<span class="hl opt">,</span><span class="hl str">&quot;--&quot;</span><span class="hl opt">,</span><span class="hl num">2</span><span class="hl opt">)) {</span>
+            <span class="hl kwb">int</span> len <span class="hl opt">=</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>tok<span class="hl opt">);</span>
+            <span class="hl kwb">int</span> pos<span class="hl opt">;</span>
+            <span class="hl kwa">for</span> <span class="hl opt">(</span>pos <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span> pos <span class="hl opt">&lt;</span> len<span class="hl opt">;</span> pos<span class="hl opt">++) {</span>
+                <span class="hl kwb">char</span> sopt<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+                sopt<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> tok<span class="hl opt">[</span>pos<span class="hl opt">];</span>
+                sopt<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+                getopt_option_t <span class="hl opt">*</span>goo <span class="hl opt">= (</span>getopt_option_t<span class="hl opt">*)</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>sopts<span class="hl opt">,</span> sopt<span class="hl opt">);</span>
+
+                <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">==</span>NULL<span class="hl opt">) {</span>
+                    <span class="hl slc">// is the argument a numerical literal that happens to be negative?</span>
+                    <span class="hl kwa">if</span> <span class="hl opt">(</span>pos<span class="hl opt">==</span><span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span> <span class="hl kwd">isdigit</span><span class="hl opt">(</span>tok<span class="hl opt">[</span>pos<span class="hl opt">])) {</span>
+                        <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>extraargs<span class="hl opt">,</span> tok<span class="hl opt">);</span>
+                        <span class="hl kwa">break</span><span class="hl opt">;</span>
+                    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+                        okay <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+                        <span class="hl kwa">if</span> <span class="hl opt">(</span>showErrors<span class="hl opt">)</span>
+                            <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Unknown option -%c</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> tok<span class="hl opt">[</span>pos<span class="hl opt">]);</span>
+                        i<span class="hl opt">++;</span>
+                        <span class="hl kwa">continue</span><span class="hl opt">;</span>
+                    <span class="hl opt">}</span>
+                <span class="hl opt">}</span>
+
+                goo<span class="hl opt">-&gt;</span>was_specified <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+
+                <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>type <span class="hl opt">==</span> GOO_BOOL_TYPE<span class="hl opt">) {</span>
+                    goo<span class="hl opt">-&gt;</span>svalue <span class="hl opt">=</span> <span class="hl str">&quot;true&quot;</span><span class="hl opt">;</span>
+                    <span class="hl kwa">continue</span><span class="hl opt">;</span>
+                <span class="hl opt">}</span>
+
+                <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>type <span class="hl opt">==</span> GOO_STRING_TYPE<span class="hl opt">) {</span>
+                    <span class="hl kwa">if</span> <span class="hl opt">((</span>i<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">) &lt;</span> toks<span class="hl opt">-&gt;</span>len<span class="hl opt">) {</span>
+                        <span class="hl kwb">char</span> <span class="hl opt">*</span>val <span class="hl opt">= (</span><span class="hl kwb">char</span><span class="hl opt">*)</span> <span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>toks<span class="hl opt">,</span> i<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">);</span>
+                        <span class="hl kwa">if</span> <span class="hl opt">(</span>val<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]==</span><span class="hl str">'-'</span><span class="hl opt">)</span>
+                        <span class="hl opt">{</span>
+                            okay <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+                            <span class="hl kwa">if</span> <span class="hl opt">(</span>showErrors<span class="hl opt">)</span>
+                                <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Ran out of arguments for option block %s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> tok<span class="hl opt">);</span>
+                        <span class="hl opt">}</span>
+                        i<span class="hl opt">++;</span>
+
+                        goo<span class="hl opt">-&gt;</span>svalue<span class="hl opt">=</span><span class="hl kwd">strdup</span><span class="hl opt">(</span>val<span class="hl opt">);</span>
+                        <span class="hl kwa">continue</span><span class="hl opt">;</span>
+                    <span class="hl opt">}</span>
+
+                    okay <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+                    <span class="hl kwa">if</span> <span class="hl opt">(</span>showErrors<span class="hl opt">)</span>
+                        <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;Option -%c requires a string argument.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> tok<span class="hl opt">[</span>pos<span class="hl opt">]);</span>
+                <span class="hl opt">}</span>
+            <span class="hl opt">}</span>
+            i<span class="hl opt">++;</span>
+            <span class="hl kwa">continue</span><span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+
+        <span class="hl slc">// it's not an option-- it's an argument.</span>
+        <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>extraargs<span class="hl opt">,</span> tok<span class="hl opt">);</span>
+        i<span class="hl opt">++;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">return</span> okay<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">getopt_was_specified</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>gopt<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>lname<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+   getopt_option_t <span class="hl opt">*</span>goo <span class="hl opt">= (</span>getopt_option_t<span class="hl opt">*)</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>lopts<span class="hl opt">,</span> lname<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>goo <span class="hl opt">==</span> NULL<span class="hl opt">)</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+
+    <span class="hl kwa">return</span> goo<span class="hl opt">-&gt;</span>was_specified<span class="hl opt">;</span>
+
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">getopt_add_spacer</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>gopt<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>s<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    getopt_option_t <span class="hl opt">*</span>goo <span class="hl opt">= (</span>getopt_option_t<span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>getopt_option_t<span class="hl opt">));</span>
+    goo<span class="hl opt">-&gt;</span>spacer <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+    goo<span class="hl opt">-&gt;</span>help <span class="hl opt">=</span> <span class="hl kwd">strdup</span><span class="hl opt">(</span>s<span class="hl opt">);</span>
+    <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>options<span class="hl opt">,</span> goo<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">getopt_add_bool</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>gopt<span class="hl opt">,</span> <span class="hl kwb">char</span> sopt<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>lname<span class="hl opt">,</span> <span class="hl kwb">int</span> def<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>help<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">char</span> sname<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+    sname<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> sopt<span class="hl opt">;</span>
+    sname<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+
+    getopt_option_t <span class="hl opt">*</span>goo <span class="hl opt">= (</span>getopt_option_t<span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>getopt_option_t<span class="hl opt">));</span>
+    goo<span class="hl opt">-&gt;</span>sname<span class="hl opt">=</span><span class="hl kwd">strdup</span><span class="hl opt">(</span>sname<span class="hl opt">);</span>
+    goo<span class="hl opt">-&gt;</span>lname<span class="hl opt">=</span><span class="hl kwd">strdup</span><span class="hl opt">(</span>lname<span class="hl opt">);</span>
+    goo<span class="hl opt">-&gt;</span>svalue<span class="hl opt">=</span><span class="hl kwd">strdup</span><span class="hl opt">(</span>def ? <span class="hl str">&quot;true&quot;</span> <span class="hl opt">:</span> <span class="hl str">&quot;false&quot;</span><span class="hl opt">);</span>
+    goo<span class="hl opt">-&gt;</span>type<span class="hl opt">=</span>GOO_BOOL_TYPE<span class="hl opt">;</span>
+    goo<span class="hl opt">-&gt;</span>help<span class="hl opt">=</span><span class="hl kwd">strdup</span><span class="hl opt">(</span>help<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_hash_table_insert</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>lopts<span class="hl opt">,</span> goo<span class="hl opt">-&gt;</span>lname<span class="hl opt">,</span> goo<span class="hl opt">);</span>
+    <span class="hl kwd">g_hash_table_insert</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>sopts<span class="hl opt">,</span> goo<span class="hl opt">-&gt;</span>sname<span class="hl opt">,</span> goo<span class="hl opt">);</span>
+    <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>options<span class="hl opt">,</span> goo<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">getopt_add_int</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>gopt<span class="hl opt">,</span> <span class="hl kwb">char</span> sopt<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>lname<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>def<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>help<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">getopt_add_string</span><span class="hl opt">(</span>gopt<span class="hl opt">,</span> sopt<span class="hl opt">,</span> lname<span class="hl opt">,</span> def<span class="hl opt">,</span> help<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">getopt_add_string</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>gopt<span class="hl opt">,</span> <span class="hl kwb">char</span> sopt<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>lname<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>def<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>help<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">char</span> sname<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">];</span>
+    sname<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> sopt<span class="hl opt">;</span>
+    sname<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+
+    getopt_option_t <span class="hl opt">*</span>goo <span class="hl opt">= (</span>getopt_option_t<span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>getopt_option_t<span class="hl opt">));</span>
+    goo<span class="hl opt">-&gt;</span>sname<span class="hl opt">=</span><span class="hl kwd">strdup</span><span class="hl opt">(</span>sname<span class="hl opt">);</span>
+    goo<span class="hl opt">-&gt;</span>lname<span class="hl opt">=</span><span class="hl kwd">strdup</span><span class="hl opt">(</span>lname<span class="hl opt">);</span>
+    goo<span class="hl opt">-&gt;</span>svalue<span class="hl opt">=</span><span class="hl kwd">strdup</span><span class="hl opt">(</span>def<span class="hl opt">);</span>
+    goo<span class="hl opt">-&gt;</span>type<span class="hl opt">=</span>GOO_STRING_TYPE<span class="hl opt">;</span>
+    goo<span class="hl opt">-&gt;</span>help<span class="hl opt">=</span><span class="hl kwd">strdup</span><span class="hl opt">(</span>help<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_hash_table_insert</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>lopts<span class="hl opt">,</span> goo<span class="hl opt">-&gt;</span>lname<span class="hl opt">,</span> goo<span class="hl opt">);</span>
+    <span class="hl kwd">g_hash_table_insert</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>sopts<span class="hl opt">,</span> goo<span class="hl opt">-&gt;</span>sname<span class="hl opt">,</span> goo<span class="hl opt">);</span>
+    <span class="hl kwd">g_ptr_array_add</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>options<span class="hl opt">,</span> goo<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">char</span> <span class="hl opt">*</span><span class="hl kwd">getopt_get_string</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>gopt<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>lname<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    getopt_option_t <span class="hl opt">*</span>goo <span class="hl opt">= (</span>getopt_option_t<span class="hl opt">*)</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>lopts<span class="hl opt">,</span> lname<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>goo <span class="hl opt">==</span> NULL<span class="hl opt">)</span>
+        <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+
+    <span class="hl kwa">return</span> goo<span class="hl opt">-&gt;</span>svalue<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">getopt_get_int</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>getopt<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>lname<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span>v <span class="hl opt">=</span> <span class="hl kwd">getopt_get_string</span><span class="hl opt">(</span>getopt<span class="hl opt">,</span> lname<span class="hl opt">);</span>
+    <span class="hl kwa">assert</span><span class="hl opt">(</span>v <span class="hl opt">!=</span> NULL<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl kwd">atoi</span><span class="hl opt">(</span>v<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">getopt_get_bool</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>getopt<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>lname<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span>v <span class="hl opt">=</span> <span class="hl kwd">getopt_get_string</span><span class="hl opt">(</span>getopt<span class="hl opt">,</span> lname<span class="hl opt">);</span>
+    <span class="hl kwa">assert</span> <span class="hl opt">(</span>v<span class="hl opt">!=</span>NULL<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl opt">!</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>v<span class="hl opt">,</span> <span class="hl str">&quot;true&quot;</span><span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">getopt_do_usage</span><span class="hl opt">(</span>getopt_t <span class="hl opt">*</span>gopt<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">int</span> leftmargin<span class="hl opt">=</span><span class="hl num">2</span><span class="hl opt">;</span>
+    <span class="hl kwb">int</span> longwidth<span class="hl opt">=</span><span class="hl num">12</span><span class="hl opt">;</span>
+    <span class="hl kwb">int</span> valuewidth<span class="hl opt">=</span><span class="hl num">10</span><span class="hl opt">;</span>
+
+    <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">unsigned int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> gopt<span class="hl opt">-&gt;</span>options<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        getopt_option_t <span class="hl opt">*</span>goo <span class="hl opt">= (</span>getopt_option_t<span class="hl opt">*)</span> <span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>options<span class="hl opt">,</span> i<span class="hl opt">);</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>spacer<span class="hl opt">)</span>
+            <span class="hl kwa">continue</span><span class="hl opt">;</span>
+
+        longwidth <span class="hl opt">=</span> <span class="hl kwd">MAX</span><span class="hl opt">(</span>longwidth<span class="hl opt">,</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>lname<span class="hl opt">));</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>type <span class="hl opt">==</span> GOO_STRING_TYPE<span class="hl opt">)</span>
+            valuewidth <span class="hl opt">=</span> <span class="hl kwd">MAX</span><span class="hl opt">(</span>valuewidth<span class="hl opt">,</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>svalue<span class="hl opt">));</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">unsigned int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> gopt<span class="hl opt">-&gt;</span>options<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        getopt_option_t <span class="hl opt">*</span>goo <span class="hl opt">= (</span>getopt_option_t<span class="hl opt">*)</span> <span class="hl kwd">g_ptr_array_index</span><span class="hl opt">(</span>gopt<span class="hl opt">-&gt;</span>options<span class="hl opt">,</span> i<span class="hl opt">);</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>spacer<span class="hl opt">)</span>
+        <span class="hl opt">{</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>help<span class="hl opt">==</span>NULL <span class="hl opt">||</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>help<span class="hl opt">)==</span><span class="hl num">0</span><span class="hl opt">)</span>
+                <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+            <span class="hl kwa">else</span>
+                <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;</span><span class="hl esc">\n</span><span class="hl str">%*s%s</span><span class="hl esc">\n\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> leftmargin<span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span><span class="hl opt">,</span> goo<span class="hl opt">-&gt;</span>help<span class="hl opt">);</span>
+            <span class="hl kwa">continue</span><span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+
+        <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;%*s&quot;</span><span class="hl opt">,</span> leftmargin<span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span><span class="hl opt">);</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>sname<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]==</span><span class="hl num">0</span><span class="hl opt">)</span>
+            <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;     &quot;</span><span class="hl opt">);</span>
+        <span class="hl kwa">else</span>
+            <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;-%c | &quot;</span><span class="hl opt">,</span> goo<span class="hl opt">-&gt;</span>sname<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+
+        <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;--%*s &quot;</span><span class="hl opt">, -</span>longwidth<span class="hl opt">,</span> goo<span class="hl opt">-&gt;</span>lname<span class="hl opt">);</span>
+
+        <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot; [ %s ]&quot;</span><span class="hl opt">,</span> goo<span class="hl opt">-&gt;</span>svalue<span class="hl opt">);</span>
+
+        <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;%*s&quot;</span><span class="hl opt">, (</span><span class="hl kwb">int</span><span class="hl opt">) (</span>valuewidth<span class="hl opt">-</span><span class="hl kwd">strlen</span><span class="hl opt">(</span>goo<span class="hl opt">-&gt;</span>svalue<span class="hl opt">)),</span> <span class="hl str">&quot;&quot;</span><span class="hl opt">);</span>
+
+        <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot; %s   &quot;</span><span class="hl opt">,</span> goo<span class="hl opt">-&gt;</span>help<span class="hl opt">);</span>
+        <span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->

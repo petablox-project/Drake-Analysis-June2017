@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/libbot/bot2-procman/src/deputy/procman.c</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl com">/*</span>
+<span class="hl com"> * process management core code</span>
+<span class="hl com"> */</span>
+
+<span class="hl ppc">#define _GNU_SOURCE</span>
+
+<span class="hl ppc">#include &lt;stdio.h&gt;</span>
+<span class="hl ppc">#include &lt;stdlib.h&gt;</span>
+<span class="hl ppc">#include &lt;stdint.h&gt;</span>
+<span class="hl ppc">#include &lt;unistd.h&gt;</span>
+<span class="hl ppc">#include &lt;string.h&gt;</span>
+<span class="hl ppc">#include &lt;ctype.h&gt;</span>
+<span class="hl ppc">#include &lt;time.h&gt;</span>
+<span class="hl ppc">#include &lt;errno.h&gt;</span>
+<span class="hl ppc">#include &lt;sys/time.h&gt;</span>
+
+<span class="hl ppc">#ifdef __APPLE__</span>
+<span class="hl ppc">#include &lt;util.h&gt;</span>
+<span class="hl ppc">#else</span>
+<span class="hl ppc">#include &lt;pty.h&gt;</span>
+<span class="hl ppc">#endif</span>
+
+<span class="hl ppc">#include &lt;sys/types.h&gt;</span>
+<span class="hl ppc">#include &lt;sys/wait.h&gt;</span>
+<span class="hl ppc">#include &lt;signal.h&gt;</span>
+
+<span class="hl ppc">#include &lt;glib.h&gt;</span>
+
+<span class="hl ppc">#include &lt;libgen.h&gt;</span>
+
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;procman.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;procinfo.h&quot;</span><span class="hl ppc"></span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl kwb">const char</span> <span class="hl opt">*</span>fmt<span class="hl opt">, ...)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">va_list</span> ap<span class="hl opt">;</span>
+    <span class="hl kwd">va_start</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> fmt<span class="hl opt">);</span>
+
+    <span class="hl kwb">char</span> timebuf<span class="hl opt">[</span><span class="hl num">80</span><span class="hl opt">];</span>
+    <span class="hl kwb">struct</span> timeval now_tv<span class="hl opt">;</span>
+    <span class="hl kwd">gettimeofday</span><span class="hl opt">(&amp;</span>now_tv<span class="hl opt">,</span> NULL<span class="hl opt">);</span>
+    <span class="hl kwb">struct</span> tm now_tm<span class="hl opt">;</span>
+    <span class="hl kwd">localtime_r</span><span class="hl opt">(&amp;</span>now_tv<span class="hl opt">.</span>tv_sec<span class="hl opt">, &amp;</span>now_tm<span class="hl opt">);</span>
+    <span class="hl kwb">int</span> pos <span class="hl opt">=</span> <span class="hl kwd">strftime</span><span class="hl opt">(</span>timebuf<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>timebuf<span class="hl opt">),</span> <span class="hl str">&quot;%FT%T&quot;</span><span class="hl opt">, &amp;</span>now_tm<span class="hl opt">);</span>
+    pos <span class="hl opt">+=</span> <span class="hl kwd">snprintf</span><span class="hl opt">(</span>timebuf <span class="hl opt">+</span> pos<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>timebuf<span class="hl opt">)-</span>pos<span class="hl opt">,</span> <span class="hl str">&quot;.%03d&quot;</span><span class="hl opt">, (</span><span class="hl kwb">int</span><span class="hl opt">)(</span>now_tv<span class="hl opt">.</span>tv_usec <span class="hl opt">/</span> <span class="hl num">1000</span><span class="hl opt">));</span>
+    <span class="hl kwd">strftime</span><span class="hl opt">(</span>timebuf <span class="hl opt">+</span> pos<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>timebuf<span class="hl opt">)-</span>pos<span class="hl opt">,</span> <span class="hl str">&quot;%z&quot;</span><span class="hl opt">, &amp;</span>now_tm<span class="hl opt">);</span>
+
+    <span class="hl kwb">char</span> buf<span class="hl opt">[</span><span class="hl num">4096</span><span class="hl opt">];</span>
+    <span class="hl kwd">vsnprintf</span> <span class="hl opt">(</span>buf<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>buf<span class="hl opt">),</span> fmt<span class="hl opt">,</span> ap<span class="hl opt">);</span>
+
+    <span class="hl kwd">va_end</span> <span class="hl opt">(</span>ap<span class="hl opt">);</span>
+
+    <span class="hl kwd">fprintf</span> <span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;%s %s&quot;</span><span class="hl opt">,</span> timebuf<span class="hl opt">,</span> buf<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static</span> procman_cmd_t <span class="hl opt">*</span> <span class="hl kwd">procman_cmd_create</span> <span class="hl opt">(</span><span class="hl kwb">const char</span> <span class="hl opt">*</span>cmd<span class="hl opt">,</span> <span class="hl kwb">const char</span><span class="hl opt">*</span> cmd_name<span class="hl opt">,</span> <span class="hl kwb">int32_t</span> cmd_id<span class="hl opt">);</span>
+<span class="hl kwb">static void</span> <span class="hl kwd">procman_cmd_destroy</span> <span class="hl opt">(</span>procman_cmd_t <span class="hl opt">*</span>cmd<span class="hl opt">);</span>
+<span class="hl kwb">static void</span> <span class="hl kwd">procman_cmd_split_str</span> <span class="hl opt">(</span>procman_cmd_t <span class="hl opt">*</span>pcmd<span class="hl opt">,</span> GHashTable<span class="hl opt">*</span> variables<span class="hl opt">);</span>
+
+<span class="hl kwb">struct</span> _procman <span class="hl opt">{</span>
+    procman_params_t params<span class="hl opt">;</span>
+    GList <span class="hl opt">*</span>commands<span class="hl opt">;</span>
+    GHashTable<span class="hl opt">*</span> variables<span class="hl opt">;</span>
+<span class="hl opt">};</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">procman_params_init_defaults</span> <span class="hl opt">(</span>procman_params_t <span class="hl opt">*</span>params<span class="hl opt">,</span> <span class="hl kwb">int</span> argc<span class="hl opt">,</span>
+       <span class="hl kwb">char</span> <span class="hl opt">**</span>argv<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">memset</span> <span class="hl opt">(</span>params<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span> <span class="hl opt">(</span>procman_params_t<span class="hl opt">));</span>
+
+    <span class="hl slc">// infer the path of procman.  This will be used with execv to start the</span>
+    <span class="hl slc">// child processes, as it's assumed that child executables reside in same</span>
+    <span class="hl slc">// directory as procman (or specified as a relative path or absolute path)</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>argc <span class="hl opt">&lt;=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+        <span class="hl kwd">fprintf</span> <span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;procman: INVALID argc (%d)</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> argc<span class="hl opt">);</span>
+        <span class="hl kwd">abort</span><span class="hl opt">();</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwb">char</span> <span class="hl opt">*</span> dirpath<span class="hl opt">, *</span> argv0<span class="hl opt">;</span>
+
+    argv0 <span class="hl opt">=</span> <span class="hl kwd">strdup</span> <span class="hl opt">(</span>argv<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+    dirpath <span class="hl opt">=</span> <span class="hl kwd">dirname</span> <span class="hl opt">(</span>argv0<span class="hl opt">);</span>
+    <span class="hl kwd">snprintf</span> <span class="hl opt">(</span> params<span class="hl opt">-&gt;</span>bin_path<span class="hl opt">,</span> <span class="hl kwa">sizeof</span> <span class="hl opt">(</span>params<span class="hl opt">-&gt;</span>bin_path<span class="hl opt">),</span> <span class="hl str">&quot;%s/&quot;</span><span class="hl opt">,</span> dirpath<span class="hl opt">);</span>
+    <span class="hl kwd">free</span> <span class="hl opt">(</span>argv0<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+procman_t <span class="hl opt">*</span><span class="hl kwd">procman_create</span> <span class="hl opt">(</span><span class="hl kwb">const</span> procman_params_t <span class="hl opt">*</span>params<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    procman_t <span class="hl opt">*</span>pm <span class="hl opt">= (</span>procman_t<span class="hl opt">*)</span><span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span> <span class="hl opt">(</span>procman_t<span class="hl opt">));</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>NULL <span class="hl opt">==</span> pm<span class="hl opt">)</span> <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+
+    <span class="hl kwd">memcpy</span> <span class="hl opt">(&amp;</span>pm<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> params<span class="hl opt">,</span> <span class="hl kwa">sizeof</span> <span class="hl opt">(</span>procman_params_t<span class="hl opt">));</span>
+
+    pm<span class="hl opt">-&gt;</span>variables <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_new_full</span><span class="hl opt">(</span>g_str_hash<span class="hl opt">,</span> g_str_equal<span class="hl opt">,</span>
+            <span class="hl opt">(</span>GDestroyNotify<span class="hl opt">)</span>g_free<span class="hl opt">, (</span>GDestroyNotify<span class="hl opt">)</span>g_free<span class="hl opt">);</span>
+
+    <span class="hl slc">// add the bin path to the PATH environment variable</span>
+    <span class="hl slc">//</span>
+    <span class="hl slc">// TODO check and see if it's already there</span>
+    <span class="hl kwb">char</span> <span class="hl opt">*</span>path <span class="hl opt">=</span> <span class="hl kwd">getenv</span> <span class="hl opt">(</span><span class="hl str">&quot;PATH&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwb">int</span> newpathlen <span class="hl opt">=</span> <span class="hl kwd">strlen</span> <span class="hl opt">(</span>path<span class="hl opt">) +</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>params<span class="hl opt">-&gt;</span>bin_path<span class="hl opt">) +</span> <span class="hl num">2</span><span class="hl opt">;</span>
+    <span class="hl kwb">char</span> <span class="hl opt">*</span>newpath <span class="hl opt">=</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> newpathlen<span class="hl opt">);</span>
+    <span class="hl kwd">sprintf</span> <span class="hl opt">(</span>newpath<span class="hl opt">,</span> <span class="hl str">&quot;%s:%s&quot;</span><span class="hl opt">,</span> params<span class="hl opt">-&gt;</span>bin_path<span class="hl opt">,</span> path<span class="hl opt">);</span>
+    <span class="hl kwd">printf</span> <span class="hl opt">(</span><span class="hl str">&quot;setting PATH to %s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> newpath<span class="hl opt">);</span>
+    <span class="hl kwd">setenv</span> <span class="hl opt">(</span><span class="hl str">&quot;PATH&quot;</span><span class="hl opt">,</span> newpath<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwd">free</span> <span class="hl opt">(</span>newpath<span class="hl opt">);</span>
+
+    <span class="hl kwa">return</span> pm<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span>
+<span class="hl kwd">procman_destroy</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GList <span class="hl opt">*</span>iter<span class="hl opt">;</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>iter <span class="hl opt">=</span> pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">;</span> iter <span class="hl opt">!=</span> NULL<span class="hl opt">;</span> iter <span class="hl opt">=</span> iter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+        procman_cmd_t <span class="hl opt">*</span>p <span class="hl opt">= (</span>procman_cmd_t<span class="hl opt">*)</span>iter<span class="hl opt">-&gt;</span>data<span class="hl opt">;</span>
+        <span class="hl kwd">procman_cmd_destroy</span> <span class="hl opt">(</span>p<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwd">g_list_free</span> <span class="hl opt">(</span>pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">);</span>
+    pm<span class="hl opt">-&gt;</span>commands <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+    <span class="hl kwd">g_hash_table_destroy</span><span class="hl opt">(</span>pm<span class="hl opt">-&gt;</span>variables<span class="hl opt">);</span>
+
+    <span class="hl kwd">free</span> <span class="hl opt">(</span>pm<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">procman_start_cmd</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> procman_cmd_t <span class="hl opt">*</span>p<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">int</span> status<span class="hl opt">;</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> p<span class="hl opt">-&gt;</span>pid<span class="hl opt">) {</span>
+        <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;[%s] has non-zero PID.  not starting again</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;[%s] starting</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">);</span>
+
+        <span class="hl kwd">procman_cmd_split_str</span><span class="hl opt">(</span>p<span class="hl opt">,</span> pm<span class="hl opt">-&gt;</span>variables<span class="hl opt">);</span>
+
+        <span class="hl slc">// close existing fd's</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>stdout_fd <span class="hl opt">&gt;=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+            <span class="hl kwd">close</span> <span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>stdout_fd<span class="hl opt">);</span>
+            p<span class="hl opt">-&gt;</span>stdout_fd <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+        p<span class="hl opt">-&gt;</span>stdin_fd <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+        p<span class="hl opt">-&gt;</span>exit_status <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+
+        <span class="hl slc">// make a backup of stderr, in case something bad happens during exec.</span>
+        <span class="hl slc">// if exec succeeds, then we have a dangling file descriptor that</span>
+        <span class="hl slc">// gets closed when the child exits... that's okay</span>
+        <span class="hl kwb">int</span> stderr_backup <span class="hl opt">=</span> <span class="hl kwd">dup</span><span class="hl opt">(</span>STDERR_FILENO<span class="hl opt">);</span>
+
+        <span class="hl kwb">int</span> pid <span class="hl opt">=</span> <span class="hl kwd">forkpty</span><span class="hl opt">(&amp;</span>p<span class="hl opt">-&gt;</span>stdin_fd<span class="hl opt">,</span> NULL<span class="hl opt">,</span> NULL<span class="hl opt">,</span> NULL<span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">==</span> pid<span class="hl opt">) {</span>
+<span class="hl slc">//            // block SIGINT (only allow the procman to kill the process now)</span>
+<span class="hl slc">//            sigset_t toblock;</span>
+<span class="hl slc">//            sigemptyset (&amp;toblock);</span>
+<span class="hl slc">//            sigaddset (&amp;toblock, SIGINT);</span>
+<span class="hl slc">//            sigprocmask (SIG_BLOCK, &amp;toblock, NULL);</span>
+
+            <span class="hl slc">// set environment variables from the beginning of the command</span>
+            <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span>i<span class="hl opt">&lt;</span>p<span class="hl opt">-&gt;</span>envc<span class="hl opt">;</span>i<span class="hl opt">++){</span>
+                <span class="hl kwd">setenv</span><span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>envp<span class="hl opt">[</span>i<span class="hl opt">][</span><span class="hl num">0</span><span class="hl opt">],</span>p<span class="hl opt">-&gt;</span>envp<span class="hl opt">[</span>i<span class="hl opt">][</span><span class="hl num">1</span><span class="hl opt">],</span><span class="hl num">1</span><span class="hl opt">);</span>
+            <span class="hl opt">}</span>
+
+            <span class="hl slc">// go!</span>
+            <span class="hl kwd">execvp</span> <span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>argv<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> p<span class="hl opt">-&gt;</span>argv<span class="hl opt">);</span>
+
+            <span class="hl kwb">char</span> ebuf<span class="hl opt">[</span><span class="hl num">1024</span><span class="hl opt">];</span>
+            <span class="hl kwd">snprintf</span> <span class="hl opt">(</span>ebuf<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>ebuf<span class="hl opt">),</span> <span class="hl str">&quot;%s&quot;</span><span class="hl opt">,</span> <span class="hl kwd">strerror</span><span class="hl opt">(</span>errno<span class="hl opt">));</span>
+            <span class="hl kwd">dbgt</span><span class="hl opt">(</span><span class="hl str">&quot;[%s] ERRROR executing [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd<span class="hl opt">-&gt;</span>str<span class="hl opt">);</span>
+            <span class="hl kwd">dbgt</span><span class="hl opt">(</span><span class="hl str">&quot;[%s] execv: %s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">,</span> ebuf<span class="hl opt">);</span>
+
+            <span class="hl slc">// if execv returns, the command did not execute successfully</span>
+            <span class="hl slc">// (e.g. permission denied or bad path or something)</span>
+
+            <span class="hl slc">// restore stderr so we can barf a real error message</span>
+            <span class="hl kwd">close</span><span class="hl opt">(</span>STDERR_FILENO<span class="hl opt">);</span>
+            <span class="hl kwd">dup2</span><span class="hl opt">(</span>stderr_backup<span class="hl opt">,</span> STDERR_FILENO<span class="hl opt">);</span>
+            <span class="hl kwd">dbgt</span><span class="hl opt">(</span><span class="hl str">&quot;[%s] ERROR executing [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd<span class="hl opt">-&gt;</span>str<span class="hl opt">);</span>
+            <span class="hl kwd">dbgt</span><span class="hl opt">(</span><span class="hl str">&quot;[%s] execv: %s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">,</span> ebuf<span class="hl opt">);</span>
+            <span class="hl kwd">close</span><span class="hl opt">(</span>stderr_backup<span class="hl opt">);</span>
+
+            <span class="hl kwd">exit</span><span class="hl opt">(-</span><span class="hl num">1</span><span class="hl opt">);</span>
+        <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>pid <span class="hl opt">&lt;</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+            <span class="hl kwd">perror</span><span class="hl opt">(</span><span class="hl str">&quot;forkpty&quot;</span><span class="hl opt">);</span>
+            <span class="hl kwd">close</span><span class="hl opt">(</span>stderr_backup<span class="hl opt">);</span>
+            <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+        <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+            p<span class="hl opt">-&gt;</span>pid <span class="hl opt">=</span> pid<span class="hl opt">;</span>
+            p<span class="hl opt">-&gt;</span>stdout_fd <span class="hl opt">=</span> p<span class="hl opt">-&gt;</span>stdin_fd<span class="hl opt">;</span>
+            <span class="hl kwd">close</span><span class="hl opt">(</span>stderr_backup<span class="hl opt">);</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">procman_start_all_cmds</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GList <span class="hl opt">*</span>iter<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> status<span class="hl opt">;</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>iter <span class="hl opt">=</span> pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">;</span> iter <span class="hl opt">!=</span> NULL<span class="hl opt">;</span> iter <span class="hl opt">=</span> iter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+        procman_cmd_t <span class="hl opt">*</span>p <span class="hl opt">= (</span>procman_cmd_t<span class="hl opt">*)</span>iter<span class="hl opt">-&gt;</span>data<span class="hl opt">;</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">==</span> p<span class="hl opt">-&gt;</span>pid<span class="hl opt">) {</span>
+            status <span class="hl opt">=</span> <span class="hl kwd">procman_start_cmd</span> <span class="hl opt">(</span>pm<span class="hl opt">,</span> p<span class="hl opt">);</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> status<span class="hl opt">) {</span>
+                <span class="hl slc">// if the command couldn't be started, then abort everything</span>
+                <span class="hl slc">// and return</span>
+                <span class="hl kwd">procman_stop_all_cmds</span> <span class="hl opt">(</span>pm<span class="hl opt">);</span>
+
+                <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+            <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span>
+<span class="hl kwd">procman_kill_cmd</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> procman_cmd_t <span class="hl opt">*</span>p<span class="hl opt">,</span> <span class="hl kwb">int</span> signum<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">==</span> p<span class="hl opt">-&gt;</span>pid<span class="hl opt">) {</span>
+        <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;[%s] has no PID.  not stopping (already dead)</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span>EINVAL<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl slc">// get a list of the process's descendants</span>
+    GArray<span class="hl opt">*</span> descendants <span class="hl opt">=</span> <span class="hl kwd">procinfo_get_descendants</span><span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>pid<span class="hl opt">);</span>
+
+    <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;[%s] stop (signal %d)</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">,</span> signum<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> <span class="hl kwd">kill</span> <span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>pid<span class="hl opt">,</span> signum<span class="hl opt">)) {</span>
+        <span class="hl kwd">g_array_free</span><span class="hl opt">(</span>descendants<span class="hl opt">,</span> TRUE<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span>errno<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// send the same signal to all of the process's descendants</span>
+    <span class="hl kwa">for</span><span class="hl opt">(</span><span class="hl kwb">int</span> i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span>descendants<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        <span class="hl kwb">int</span> child_pid <span class="hl opt">=</span> <span class="hl kwd">g_array_index</span><span class="hl opt">(</span>descendants<span class="hl opt">,</span> <span class="hl kwb">int</span><span class="hl opt">,</span> i<span class="hl opt">);</span>
+        <span class="hl kwd">dbgt</span><span class="hl opt">(</span><span class="hl str">&quot;signal %d to descendant %d (%p)</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> signum<span class="hl opt">,</span> child_pid<span class="hl opt">,</span> p<span class="hl opt">);</span>
+        <span class="hl kwd">kill</span><span class="hl opt">(</span>child_pid<span class="hl opt">,</span> signum<span class="hl opt">);</span>
+
+        <span class="hl kwb">int</span> new_descendant <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+        <span class="hl kwa">for</span><span class="hl opt">(</span><span class="hl kwb">int</span> j<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> j<span class="hl opt">&lt;</span>p<span class="hl opt">-&gt;</span>descendants_to_kill<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> j<span class="hl opt">++) {</span>
+            <span class="hl kwa">if</span><span class="hl opt">(</span><span class="hl kwd">g_array_index</span><span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>descendants_to_kill<span class="hl opt">,</span> <span class="hl kwb">int</span><span class="hl opt">,</span> j<span class="hl opt">) ==</span> child_pid<span class="hl opt">) {</span>
+                new_descendant <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+                <span class="hl kwa">break</span><span class="hl opt">;</span>
+            <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">if</span><span class="hl opt">(</span>new_descendant<span class="hl opt">)</span>
+            <span class="hl kwd">g_array_append_val</span><span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>descendants_to_kill<span class="hl opt">,</span> child_pid<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">procman_stop_cmd</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> procman_cmd_t <span class="hl opt">*</span>p<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">return</span> <span class="hl kwd">procman_kill_cmd</span> <span class="hl opt">(</span>pm<span class="hl opt">,</span> p<span class="hl opt">,</span> SIGINT<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">procman_stop_all_cmds</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GList <span class="hl opt">*</span>iter<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> ret <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwb">int</span> status<span class="hl opt">;</span>
+
+    <span class="hl slc">// loop through each managed process and try to stop it</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>iter <span class="hl opt">=</span> pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">;</span> iter <span class="hl opt">!=</span> NULL<span class="hl opt">;</span> iter <span class="hl opt">=</span> iter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+        procman_cmd_t <span class="hl opt">*</span>p <span class="hl opt">= (</span>procman_cmd_t<span class="hl opt">*)</span>iter<span class="hl opt">-&gt;</span>data<span class="hl opt">;</span>
+        status <span class="hl opt">=</span> <span class="hl kwd">procman_stop_cmd</span> <span class="hl opt">(</span>pm<span class="hl opt">,</span> p<span class="hl opt">);</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> status<span class="hl opt">) {</span>
+            ret <span class="hl opt">=</span> status<span class="hl opt">;</span>
+            <span class="hl slc">// If something bad happened, try to stop the other processes, but</span>
+            <span class="hl slc">// still return an error</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> ret<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span>
+<span class="hl kwd">procman_check_for_dead_children</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> procman_cmd_t <span class="hl opt">**</span>dead_child<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">int</span> status<span class="hl opt">;</span>
+
+    <span class="hl slc">// check for dead children</span>
+    <span class="hl opt">*</span>dead_child <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> pid <span class="hl opt">=</span> <span class="hl kwd">waitpid</span> <span class="hl opt">(-</span><span class="hl num">1</span><span class="hl opt">, &amp;</span>status<span class="hl opt">,</span> WNOHANG<span class="hl opt">);</span>
+    <span class="hl kwa">if</span><span class="hl opt">(</span>pid <span class="hl opt">&lt;=</span> <span class="hl num">0</span><span class="hl opt">)</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+
+    GList <span class="hl opt">*</span>iter<span class="hl opt">;</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>iter <span class="hl opt">=</span> pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">;</span> iter <span class="hl opt">!=</span> NULL<span class="hl opt">;</span> iter <span class="hl opt">=</span> iter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+        procman_cmd_t <span class="hl opt">*</span>p <span class="hl opt">= (</span>procman_cmd_t<span class="hl opt">*)</span>iter<span class="hl opt">-&gt;</span>data<span class="hl opt">;</span>
+        <span class="hl kwa">if</span><span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>pid <span class="hl opt">==</span> <span class="hl num">0</span> <span class="hl opt">||</span> pid <span class="hl opt">!=</span> p<span class="hl opt">-&gt;</span>pid<span class="hl opt">)</span>
+            <span class="hl kwa">continue</span><span class="hl opt">;</span>
+        <span class="hl opt">*</span>dead_child <span class="hl opt">=</span> p<span class="hl opt">;</span>
+        p<span class="hl opt">-&gt;</span>pid <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+        p<span class="hl opt">-&gt;</span>exit_status <span class="hl opt">=</span> status<span class="hl opt">;</span>
+
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">WIFSIGNALED</span> <span class="hl opt">(</span>status<span class="hl opt">)) {</span>
+            <span class="hl kwb">int</span> signum <span class="hl opt">=</span> <span class="hl kwd">WTERMSIG</span> <span class="hl opt">(</span>status<span class="hl opt">);</span>
+            <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;[%s] terminated by signal %d (%s)</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+                    p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">,</span> signum<span class="hl opt">,</span> <span class="hl kwd">strsignal</span> <span class="hl opt">(</span>signum<span class="hl opt">));</span>
+        <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>status <span class="hl opt">!=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+            <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;[%s] exited with status %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+                    p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">,</span> <span class="hl kwd">WEXITSTATUS</span> <span class="hl opt">(</span>status<span class="hl opt">));</span>
+        <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+          <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;[%s] exited</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> p<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">);</span>
+        <span class="hl opt">}</span>
+
+        <span class="hl slc">// check for and kill orphaned children.</span>
+        <span class="hl kwa">for</span><span class="hl opt">(</span><span class="hl kwb">int</span> orphan_index<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> orphan_index<span class="hl opt">&lt;</span>p<span class="hl opt">-&gt;</span>descendants_to_kill<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> orphan_index<span class="hl opt">++) {</span>
+            <span class="hl kwb">int</span> child_pid <span class="hl opt">=</span> <span class="hl kwd">g_array_index</span><span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>descendants_to_kill<span class="hl opt">,</span> <span class="hl kwb">int</span><span class="hl opt">,</span> orphan_index<span class="hl opt">);</span>
+            <span class="hl kwa">if</span><span class="hl opt">(</span><span class="hl kwd">procinfo_is_orphaned_child_of</span><span class="hl opt">(</span>child_pid<span class="hl opt">,</span> pid<span class="hl opt">)) {</span>
+                <span class="hl kwd">dbgt</span><span class="hl opt">(</span><span class="hl str">&quot;sending SIGKILL to orphan process %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> child_pid<span class="hl opt">);</span>
+                <span class="hl kwd">kill</span><span class="hl opt">(</span>child_pid<span class="hl opt">,</span> SIGKILL<span class="hl opt">);</span>
+            <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+
+        <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;reaped [%d] but couldn't find process</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pid<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span>
+<span class="hl kwd">procman_close_dead_pipes</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> procman_cmd_t <span class="hl opt">*</span>cmd<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>stdout_fd <span class="hl opt">&lt;</span> <span class="hl num">0</span> <span class="hl opt">&amp;&amp;</span> cmd<span class="hl opt">-&gt;</span>stdin_fd <span class="hl opt">&lt;</span> <span class="hl num">0</span><span class="hl opt">)</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>pid<span class="hl opt">) {</span>
+        <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;refusing to close pipes for command &quot;</span>
+                <span class="hl str">&quot;with nonzero pid [%s] [%d]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+                cmd<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">,</span> cmd<span class="hl opt">-&gt;</span>pid<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>stdout_fd <span class="hl opt">&gt;=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+        <span class="hl kwd">close</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>stdout_fd<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    cmd<span class="hl opt">-&gt;</span>stdin_fd <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    cmd<span class="hl opt">-&gt;</span>stdout_fd <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl com">/**</span>
+<span class="hl com"> * same as g_strsplit_set, but removes empty tokens</span>
+<span class="hl com"> */</span>
+<span class="hl kwb">static char</span> <span class="hl opt">**</span>
+<span class="hl kwd">strsplit_set_packed</span><span class="hl opt">(</span><span class="hl kwb">const char</span> <span class="hl opt">*</span>tosplit<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>delimiters<span class="hl opt">,</span> <span class="hl kwb">int</span> max_tokens<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">char</span> <span class="hl opt">**</span>tmp <span class="hl opt">=</span> <span class="hl kwd">g_strsplit_set</span><span class="hl opt">(</span>tosplit<span class="hl opt">,</span> delimiters<span class="hl opt">,</span> max_tokens<span class="hl opt">);</span>
+    <span class="hl kwb">int</span> i<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> n<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwa">for</span><span class="hl opt">(</span>i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> tmp<span class="hl opt">[</span>i<span class="hl opt">];</span> i<span class="hl opt">++) {</span>
+        <span class="hl kwa">if</span><span class="hl opt">(</span><span class="hl kwd">strlen</span><span class="hl opt">(</span>tmp<span class="hl opt">[</span>i<span class="hl opt">]))</span> n<span class="hl opt">++;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwb">char</span> <span class="hl opt">**</span>result <span class="hl opt">=</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span>n<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">char</span><span class="hl opt">*));</span>
+    <span class="hl kwb">int</span> c<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwa">for</span><span class="hl opt">(</span>i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> tmp<span class="hl opt">[</span>i<span class="hl opt">];</span> i<span class="hl opt">++) {</span>
+        <span class="hl kwa">if</span><span class="hl opt">(</span><span class="hl kwd">strlen</span><span class="hl opt">(</span>tmp<span class="hl opt">[</span>i<span class="hl opt">])) {</span>
+            result<span class="hl opt">[</span>c<span class="hl opt">] =</span> <span class="hl kwd">g_strdup</span><span class="hl opt">(</span>tmp<span class="hl opt">[</span>i<span class="hl opt">]);</span>
+            c<span class="hl opt">++;</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwd">g_strfreev</span><span class="hl opt">(</span>tmp<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> result<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwc">typedef</span> <span class="hl kwb">struct</span> <span class="hl opt">{</span>
+    <span class="hl kwb">const char</span><span class="hl opt">*</span> w<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> w_len<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> pos<span class="hl opt">;</span>
+    <span class="hl kwb">char</span> cur_tok<span class="hl opt">;</span>
+    GString<span class="hl opt">*</span> result<span class="hl opt">;</span>
+    GHashTable<span class="hl opt">*</span> variables<span class="hl opt">;</span>
+<span class="hl opt">}</span> subst_parse_context_t<span class="hl opt">;</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">is_valid_variable_char</span><span class="hl opt">(</span><span class="hl kwb">char</span> c<span class="hl opt">,</span> <span class="hl kwb">int</span> pos<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">const char</span><span class="hl opt">*</span> valid_start <span class="hl opt">=</span> <span class="hl str">&quot;abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_&quot;</span><span class="hl opt">;</span>
+    <span class="hl kwb">const char</span><span class="hl opt">*</span> valid_follow <span class="hl opt">=</span> <span class="hl str">&quot;1234567890&quot;</span><span class="hl opt">;</span>
+    <span class="hl kwa">return</span> <span class="hl opt">(</span><span class="hl kwd">strchr</span><span class="hl opt">(</span>valid_start<span class="hl opt">,</span> c<span class="hl opt">) !=</span> NULL <span class="hl opt">||</span>
+            <span class="hl opt">((</span><span class="hl num">0</span> <span class="hl opt">==</span> pos<span class="hl opt">) &amp;&amp; (</span><span class="hl kwd">strchr</span><span class="hl opt">(</span>valid_follow<span class="hl opt">,</span> c<span class="hl opt">) !=</span> NULL<span class="hl opt">)));</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static char</span>
+<span class="hl kwd">subst_vars_has_token</span><span class="hl opt">(</span>subst_parse_context_t<span class="hl opt">*</span> ctx<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">return</span> <span class="hl opt">(</span>ctx<span class="hl opt">-&gt;</span>pos <span class="hl opt">&lt;</span> ctx<span class="hl opt">-&gt;</span>w_len<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static char</span>
+<span class="hl kwd">subst_vars_peek_token</span><span class="hl opt">(</span>subst_parse_context_t<span class="hl opt">*</span> ctx<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">return</span> <span class="hl kwd">subst_vars_has_token</span><span class="hl opt">(</span>ctx<span class="hl opt">)</span> ? ctx<span class="hl opt">-&gt;</span>w<span class="hl opt">[</span>ctx<span class="hl opt">-&gt;</span>pos<span class="hl opt">] :</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">subst_vars_eat_token</span><span class="hl opt">(</span>subst_parse_context_t<span class="hl opt">*</span> ctx<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span><span class="hl opt">(</span><span class="hl kwd">subst_vars_has_token</span><span class="hl opt">(</span>ctx<span class="hl opt">)) {</span>
+        ctx<span class="hl opt">-&gt;</span>cur_tok <span class="hl opt">=</span> ctx<span class="hl opt">-&gt;</span>w<span class="hl opt">[</span>ctx<span class="hl opt">-&gt;</span>pos<span class="hl opt">];</span>
+        ctx<span class="hl opt">-&gt;</span>pos<span class="hl opt">++;</span>
+        <span class="hl kwa">return</span> TRUE<span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        ctx<span class="hl opt">-&gt;</span>cur_tok <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+        <span class="hl kwa">return</span> FALSE<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">subst_vars_parse_variable</span><span class="hl opt">(</span>subst_parse_context_t<span class="hl opt">*</span> ctx<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">int</span> start <span class="hl opt">=</span> ctx<span class="hl opt">-&gt;</span>pos<span class="hl opt">;</span>
+    <span class="hl kwa">if</span><span class="hl opt">(!</span><span class="hl kwd">subst_vars_has_token</span><span class="hl opt">(</span>ctx<span class="hl opt">)) {</span>
+        <span class="hl kwd">g_string_append_c</span><span class="hl opt">(</span>ctx<span class="hl opt">-&gt;</span>result<span class="hl opt">,</span> <span class="hl str">'$'</span><span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwb">int</span> has_braces <span class="hl opt">=</span> <span class="hl kwd">subst_vars_peek_token</span><span class="hl opt">(</span>ctx<span class="hl opt">) ==</span> <span class="hl str">'{'</span><span class="hl opt">;</span>
+    <span class="hl kwa">if</span><span class="hl opt">(</span>has_braces<span class="hl opt">)</span>
+        <span class="hl kwd">subst_vars_eat_token</span><span class="hl opt">(</span>ctx<span class="hl opt">);</span>
+    <span class="hl kwb">int</span> varname_start <span class="hl opt">=</span> ctx<span class="hl opt">-&gt;</span>pos<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> varname_len <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwa">while</span><span class="hl opt">(</span><span class="hl kwd">subst_vars_has_token</span><span class="hl opt">(</span>ctx<span class="hl opt">) &amp;&amp;</span>
+          <span class="hl kwd">is_valid_variable_char</span><span class="hl opt">(</span><span class="hl kwd">subst_vars_peek_token</span><span class="hl opt">(</span>ctx<span class="hl opt">),</span> varname_len<span class="hl opt">)) {</span>
+        varname_len<span class="hl opt">++;</span>
+        <span class="hl kwd">subst_vars_eat_token</span><span class="hl opt">(</span>ctx<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwb">char</span><span class="hl opt">*</span> varname <span class="hl opt">=</span> <span class="hl kwd">g_strndup</span><span class="hl opt">(&amp;</span>ctx<span class="hl opt">-&gt;</span>w<span class="hl opt">[</span>varname_start<span class="hl opt">],</span> varname_len<span class="hl opt">);</span>
+    <span class="hl kwb">int</span> braces_ok <span class="hl opt">=</span> TRUE<span class="hl opt">;</span>
+    <span class="hl kwa">if</span><span class="hl opt">(</span>has_braces <span class="hl opt">&amp;&amp; ((!</span><span class="hl kwd">subst_vars_eat_token</span><span class="hl opt">(</span>ctx<span class="hl opt">)) ||</span> ctx<span class="hl opt">-&gt;</span>cur_tok <span class="hl opt">!=</span> <span class="hl str">'}'</span><span class="hl opt">))</span>
+        braces_ok <span class="hl opt">=</span> FALSE<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> ok <span class="hl opt">=</span> varname_len <span class="hl opt">&amp;&amp;</span> braces_ok<span class="hl opt">;</span>
+    <span class="hl kwa">if</span><span class="hl opt">(</span>ok<span class="hl opt">) {</span>
+        <span class="hl slc">// first lookup the variable in our stored table</span>
+        <span class="hl kwb">char</span><span class="hl opt">*</span> val <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>ctx<span class="hl opt">-&gt;</span>variables<span class="hl opt">,</span> varname<span class="hl opt">);</span>
+        <span class="hl slc">// if that fails, then check for a similar environment variable</span>
+        <span class="hl kwa">if</span><span class="hl opt">(!</span>val<span class="hl opt">)</span>
+            val <span class="hl opt">=</span> <span class="hl kwd">getenv</span><span class="hl opt">(</span>varname<span class="hl opt">);</span>
+        <span class="hl kwa">if</span><span class="hl opt">(</span>val<span class="hl opt">)</span>
+            <span class="hl kwd">g_string_append</span><span class="hl opt">(</span>ctx<span class="hl opt">-&gt;</span>result<span class="hl opt">,</span> val<span class="hl opt">);</span>
+        <span class="hl kwa">else</span>
+            ok <span class="hl opt">=</span> FALSE<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">if</span><span class="hl opt">(!</span>ok<span class="hl opt">)</span>
+        <span class="hl kwd">g_string_append_len</span><span class="hl opt">(</span>ctx<span class="hl opt">-&gt;</span>result<span class="hl opt">, &amp;</span>ctx<span class="hl opt">-&gt;</span>w<span class="hl opt">[</span>start <span class="hl opt">-</span> <span class="hl num">1</span><span class="hl opt">],</span> ctx<span class="hl opt">-&gt;</span>pos <span class="hl opt">-</span> start <span class="hl opt">+</span> <span class="hl num">1</span><span class="hl opt">);</span>
+    <span class="hl kwd">g_free</span><span class="hl opt">(</span>varname<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> ok<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl com">/**</span>
+<span class="hl com"> * Do variable expansion on a command argument.  This searches the argument for</span>
+<span class="hl com"> * text of the form $VARNAME and ${VARNAME}.  For each discovered variable, it</span>
+<span class="hl com"> * then expands the variable.  Values defined in the hashtable vars are used</span>
+<span class="hl com"> * first, followed by environment variable values.  If a variable expansion</span>
+<span class="hl com"> * fails, then the corresponding text is left unchanged.</span>
+<span class="hl com"> */</span>
+<span class="hl kwb">static char</span><span class="hl opt">*</span>
+<span class="hl kwd">subst_vars</span><span class="hl opt">(</span><span class="hl kwb">const char</span><span class="hl opt">*</span> w<span class="hl opt">,</span> GHashTable<span class="hl opt">*</span> vars<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    subst_parse_context_t ctx<span class="hl opt">;</span>
+    ctx<span class="hl opt">.</span>w <span class="hl opt">=</span> w<span class="hl opt">;</span>
+    ctx<span class="hl opt">.</span>w_len <span class="hl opt">=</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>w<span class="hl opt">);</span>
+    ctx<span class="hl opt">.</span>pos <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    ctx<span class="hl opt">.</span>result <span class="hl opt">=</span> <span class="hl kwd">g_string_sized_new</span><span class="hl opt">(</span>ctx<span class="hl opt">.</span>w_len <span class="hl opt">*</span> <span class="hl num">2</span><span class="hl opt">);</span>
+    ctx<span class="hl opt">.</span>variables <span class="hl opt">=</span> vars<span class="hl opt">;</span>
+
+    <span class="hl kwa">while</span><span class="hl opt">(</span><span class="hl kwd">subst_vars_eat_token</span><span class="hl opt">(&amp;</span>ctx<span class="hl opt">)) {</span>
+        <span class="hl kwb">char</span> c <span class="hl opt">=</span> ctx<span class="hl opt">.</span>cur_tok<span class="hl opt">;</span>
+        <span class="hl kwa">if</span><span class="hl opt">(</span><span class="hl str">'</span><span class="hl esc">\\</span><span class="hl str">'</span> <span class="hl opt">==</span> c<span class="hl opt">) {</span>
+            <span class="hl kwa">if</span><span class="hl opt">(</span><span class="hl kwd">subst_vars_eat_token</span><span class="hl opt">(&amp;</span>ctx<span class="hl opt">)) {</span>
+                <span class="hl kwd">g_string_append_c</span><span class="hl opt">(</span>ctx<span class="hl opt">.</span>result<span class="hl opt">,</span> c<span class="hl opt">);</span>
+            <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+                <span class="hl kwd">g_string_append_c</span><span class="hl opt">(</span>ctx<span class="hl opt">.</span>result<span class="hl opt">,</span> <span class="hl str">'</span><span class="hl esc">\\</span><span class="hl str">'</span><span class="hl opt">);</span>
+            <span class="hl opt">}</span>
+            <span class="hl kwa">continue</span><span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+        <span class="hl slc">// variable?</span>
+        <span class="hl kwa">if</span><span class="hl opt">(</span><span class="hl str">'$'</span> <span class="hl opt">==</span> c<span class="hl opt">) {</span>
+            <span class="hl kwd">subst_vars_parse_variable</span><span class="hl opt">(&amp;</span>ctx<span class="hl opt">);</span>
+        <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+            <span class="hl kwd">g_string_append_c</span><span class="hl opt">(</span>ctx<span class="hl opt">.</span>result<span class="hl opt">,</span> c<span class="hl opt">);</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwb">char</span><span class="hl opt">*</span> result <span class="hl opt">=</span> <span class="hl kwd">g_strdup</span><span class="hl opt">(</span>ctx<span class="hl opt">.</span>result<span class="hl opt">-&gt;</span>str<span class="hl opt">);</span>
+    <span class="hl kwd">g_string_free</span><span class="hl opt">(</span>ctx<span class="hl opt">.</span>result<span class="hl opt">,</span> TRUE<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> result<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">procman_cmd_split_str</span> <span class="hl opt">(</span>procman_cmd_t <span class="hl opt">*</span>pcmd<span class="hl opt">,</span> GHashTable<span class="hl opt">*</span> variables<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>argv<span class="hl opt">) {</span>
+        <span class="hl kwd">g_strfreev</span> <span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>argv<span class="hl opt">);</span>
+        pcmd<span class="hl opt">-&gt;</span>argv <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>envp<span class="hl opt">) {</span>
+        <span class="hl kwa">for</span><span class="hl opt">(</span><span class="hl kwb">int</span> i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span>i<span class="hl opt">&lt;</span>pcmd<span class="hl opt">-&gt;</span>envc<span class="hl opt">;</span>i<span class="hl opt">++)</span>
+            <span class="hl kwd">g_strfreev</span> <span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>envp<span class="hl opt">[</span>i<span class="hl opt">]);</span>
+        <span class="hl kwd">free</span><span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>envp<span class="hl opt">);</span>
+        pcmd<span class="hl opt">-&gt;</span>envp <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// TODO don't use g_shell_parse_argv... it's not good with escape characters</span>
+    <span class="hl kwb">char</span> <span class="hl opt">**</span> argv<span class="hl opt">=</span>NULL<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> argc <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    GError <span class="hl opt">*</span>err <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    gboolean parsed <span class="hl opt">=</span> <span class="hl kwd">g_shell_parse_argv</span><span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>cmd<span class="hl opt">-&gt;</span>str<span class="hl opt">, &amp;</span>argc<span class="hl opt">,</span>
+            <span class="hl opt">&amp;</span>argv<span class="hl opt">, &amp;</span>err<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span><span class="hl opt">(!</span>parsed <span class="hl opt">||</span> err<span class="hl opt">) {</span>
+        <span class="hl slc">// unable to parse the command string as a Bourne shell command.</span>
+        <span class="hl slc">// Do the simple thing and split it on spaces.</span>
+        pcmd<span class="hl opt">-&gt;</span>envp <span class="hl opt">=</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">char</span><span class="hl opt">**));</span>
+        pcmd<span class="hl opt">-&gt;</span>envc <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+        pcmd<span class="hl opt">-&gt;</span>argv <span class="hl opt">=</span> <span class="hl kwd">strsplit_set_packed</span><span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>cmd<span class="hl opt">-&gt;</span>str<span class="hl opt">,</span> <span class="hl str">&quot;</span> <span class="hl esc">\t\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+        <span class="hl kwa">for</span><span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>argc<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> pcmd<span class="hl opt">-&gt;</span>argv<span class="hl opt">[</span>pcmd<span class="hl opt">-&gt;</span>argc<span class="hl opt">];</span> pcmd<span class="hl opt">-&gt;</span>argc<span class="hl opt">++);</span>
+        <span class="hl kwd">g_error_free</span><span class="hl opt">(</span>err<span class="hl opt">);</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// extract environment variables</span>
+    <span class="hl kwb">int</span> envCount<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwb">char</span> <span class="hl opt">*</span> equalSigns<span class="hl opt">[</span><span class="hl num">512</span><span class="hl opt">];</span>
+    <span class="hl kwa">while</span><span class="hl opt">((</span>equalSigns<span class="hl opt">[</span>envCount<span class="hl opt">]=</span><span class="hl kwd">strchr</span><span class="hl opt">(</span>argv<span class="hl opt">[</span>envCount<span class="hl opt">],</span><span class="hl str">'='</span><span class="hl opt">)))</span>
+        envCount<span class="hl opt">++;</span>
+    pcmd<span class="hl opt">-&gt;</span>envc<span class="hl opt">=</span>envCount<span class="hl opt">;</span>
+    pcmd<span class="hl opt">-&gt;</span>argc<span class="hl opt">=</span>argc<span class="hl opt">-</span>envCount<span class="hl opt">;</span>
+    pcmd<span class="hl opt">-&gt;</span>envp <span class="hl opt">=</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>envc<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">,</span><span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">char</span><span class="hl opt">**));</span>
+    pcmd<span class="hl opt">-&gt;</span>argv <span class="hl opt">=</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>argc<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">,</span><span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">char</span><span class="hl opt">*));</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span>i<span class="hl opt">&lt;</span>argc<span class="hl opt">;</span>i<span class="hl opt">++) {</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>i<span class="hl opt">&lt;</span>envCount<span class="hl opt">)</span>
+            pcmd<span class="hl opt">-&gt;</span>envp<span class="hl opt">[</span>i<span class="hl opt">]=</span><span class="hl kwd">g_strsplit</span><span class="hl opt">(</span>argv<span class="hl opt">[</span>i<span class="hl opt">],</span><span class="hl str">&quot;=&quot;</span><span class="hl opt">,</span><span class="hl num">2</span><span class="hl opt">);</span>
+        <span class="hl kwa">else</span> <span class="hl opt">{</span>
+            <span class="hl slc">// substitute variables</span>
+            pcmd<span class="hl opt">-&gt;</span>argv<span class="hl opt">[</span>i<span class="hl opt">-</span>envCount<span class="hl opt">]=</span><span class="hl kwd">subst_vars</span><span class="hl opt">(</span>argv<span class="hl opt">[</span>i<span class="hl opt">],</span> variables<span class="hl opt">);</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwd">g_strfreev</span><span class="hl opt">(</span>argv<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static</span> procman_cmd_t <span class="hl opt">*</span>
+<span class="hl kwd">procman_cmd_create</span> <span class="hl opt">(</span><span class="hl kwb">const char</span> <span class="hl opt">*</span>cmd<span class="hl opt">,</span> <span class="hl kwb">const char</span><span class="hl opt">*</span> cmd_name<span class="hl opt">,</span> <span class="hl kwb">int32_t</span> cmd_id<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    procman_cmd_t <span class="hl opt">*</span>pcmd <span class="hl opt">= (</span>procman_cmd_t<span class="hl opt">*)</span><span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span> <span class="hl opt">(</span>procman_cmd_t<span class="hl opt">));</span>
+    pcmd<span class="hl opt">-&gt;</span>cmd <span class="hl opt">=</span> <span class="hl kwd">g_string_new</span> <span class="hl opt">(</span><span class="hl str">&quot;&quot;</span><span class="hl opt">);</span>
+    pcmd<span class="hl opt">-&gt;</span>cmd_id <span class="hl opt">=</span> cmd_id<span class="hl opt">;</span>
+    pcmd<span class="hl opt">-&gt;</span>cmd_name <span class="hl opt">=</span> <span class="hl kwd">g_strdup</span><span class="hl opt">(</span>cmd_name<span class="hl opt">);</span>
+    pcmd<span class="hl opt">-&gt;</span>stdout_fd <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    pcmd<span class="hl opt">-&gt;</span>stdin_fd <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl kwd">g_string_assign</span> <span class="hl opt">(</span>pcmd<span class="hl opt">-&gt;</span>cmd<span class="hl opt">,</span> cmd<span class="hl opt">);</span>
+
+    pcmd<span class="hl opt">-&gt;</span>argv <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    pcmd<span class="hl opt">-&gt;</span>argc <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    pcmd<span class="hl opt">-&gt;</span>envp <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    pcmd<span class="hl opt">-&gt;</span>envc <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    pcmd<span class="hl opt">-&gt;</span>descendants_to_kill <span class="hl opt">=</span> <span class="hl kwd">g_array_new</span><span class="hl opt">(</span>FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">int</span><span class="hl opt">));</span>
+
+    <span class="hl kwa">return</span> pcmd<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">procman_cmd_destroy</span> <span class="hl opt">(</span>procman_cmd_t <span class="hl opt">*</span>cmd<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">g_string_free</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>cmd<span class="hl opt">,</span> TRUE<span class="hl opt">);</span>
+    <span class="hl kwd">g_strfreev</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>argv<span class="hl opt">);</span>
+    <span class="hl kwd">g_array_free</span><span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>descendants_to_kill<span class="hl opt">,</span> TRUE<span class="hl opt">);</span>
+    <span class="hl kwa">for</span><span class="hl opt">(</span><span class="hl kwb">int</span> i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span>i<span class="hl opt">&lt;</span>cmd<span class="hl opt">-&gt;</span>envc<span class="hl opt">;</span>i<span class="hl opt">++)</span>
+       <span class="hl kwd">g_strfreev</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>envp<span class="hl opt">[</span>i<span class="hl opt">]);</span>
+    <span class="hl kwd">free</span><span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>envp<span class="hl opt">);</span>
+    <span class="hl kwd">g_free</span><span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">);</span>
+    <span class="hl kwd">free</span> <span class="hl opt">(</span>cmd<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">const</span> GList <span class="hl opt">*</span>
+<span class="hl kwd">procman_get_cmds</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">) {</span>
+    <span class="hl kwa">return</span> pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span>
+<span class="hl kwd">procman_set_variable</span><span class="hl opt">(</span>procman_t<span class="hl opt">*</span> pm<span class="hl opt">,</span> <span class="hl kwb">const char</span><span class="hl opt">*</span> name<span class="hl opt">,</span> <span class="hl kwb">const char</span><span class="hl opt">*</span> val<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">g_hash_table_insert</span><span class="hl opt">(</span>pm<span class="hl opt">-&gt;</span>variables<span class="hl opt">,</span> <span class="hl kwd">g_strdup</span><span class="hl opt">(</span>name<span class="hl opt">),</span> <span class="hl kwd">g_strdup</span><span class="hl opt">(</span>val<span class="hl opt">));</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span>
+<span class="hl kwd">procman_remove_variable</span><span class="hl opt">(</span>procman_t<span class="hl opt">*</span> pm<span class="hl opt">,</span> <span class="hl kwb">const char</span><span class="hl opt">*</span> name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">g_hash_table_remove</span><span class="hl opt">(</span>pm<span class="hl opt">-&gt;</span>variables<span class="hl opt">,</span> name<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span>
+<span class="hl kwd">procman_remove_all_variables</span><span class="hl opt">(</span>procman_t<span class="hl opt">*</span> pm<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">g_hash_table_remove_all</span><span class="hl opt">(</span>pm<span class="hl opt">-&gt;</span>variables<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+procman_cmd_t<span class="hl opt">*</span>
+<span class="hl kwd">procman_add_cmd</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>cmd_str<span class="hl opt">,</span> <span class="hl kwb">const char</span><span class="hl opt">*</span> cmd_name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl slc">// pick a suitable ID</span>
+    <span class="hl kwb">int32_t</span> cmd_id<span class="hl opt">;</span>
+
+    <span class="hl slc">// TODO make this more efficient (i.e. sort the existing cmd_ids)</span>
+    <span class="hl slc">//      this implementation is O (n^2)</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>cmd_id<span class="hl opt">=</span><span class="hl num">1</span><span class="hl opt">;</span> cmd_id<span class="hl opt">&lt;</span>INT_MAX<span class="hl opt">;</span> cmd_id<span class="hl opt">++) {</span>
+        <span class="hl kwb">int</span> collision <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+        GList <span class="hl opt">*</span>iter<span class="hl opt">;</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>iter<span class="hl opt">=</span>pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">;</span> iter<span class="hl opt">;</span> iter<span class="hl opt">=</span>iter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+            procman_cmd_t <span class="hl opt">*</span>cmd <span class="hl opt">= (</span>procman_cmd_t<span class="hl opt">*)</span>iter<span class="hl opt">-&gt;</span>data<span class="hl opt">;</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>cmd_id <span class="hl opt">==</span> cmd_id<span class="hl opt">) {</span>
+                collision <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+                <span class="hl kwa">break</span><span class="hl opt">;</span>
+            <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span> collision<span class="hl opt">)</span> <span class="hl kwa">break</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>cmd_id <span class="hl opt">==</span> INT_MAX<span class="hl opt">) {</span>
+        <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;way too many commands on the system....</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+        <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    procman_cmd_t <span class="hl opt">*</span>newcmd <span class="hl opt">=</span> <span class="hl kwd">procman_cmd_create</span> <span class="hl opt">(</span>cmd_str<span class="hl opt">,</span> cmd_name<span class="hl opt">,</span> cmd_id<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>newcmd<span class="hl opt">) {</span>
+        pm<span class="hl opt">-&gt;</span>commands <span class="hl opt">=</span> <span class="hl kwd">g_list_append</span> <span class="hl opt">(</span>pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">,</span> newcmd<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;[%s] new command [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> newcmd<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">,</span> newcmd<span class="hl opt">-&gt;</span>cmd<span class="hl opt">-&gt;</span>str<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> newcmd<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span>
+<span class="hl kwd">procman_remove_cmd</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> procman_cmd_t <span class="hl opt">*</span>cmd<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl slc">// check that cmd is actually in the list</span>
+    GList <span class="hl opt">*</span>toremove <span class="hl opt">=</span> <span class="hl kwd">g_list_find</span> <span class="hl opt">(</span>pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">,</span> cmd<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> toremove<span class="hl opt">) {</span>
+        <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;procman ERRROR: %s does not appear to be managed &quot;</span>
+                <span class="hl str">&quot;by this procman!!</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+                cmd<span class="hl opt">-&gt;</span>cmd<span class="hl opt">-&gt;</span>str<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// stop the command (if it's running)</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>pid<span class="hl opt">) {</span>
+        <span class="hl kwd">dbgt</span> <span class="hl opt">(</span><span class="hl str">&quot;procman ERROR: refusing to remove running command %s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+                cmd<span class="hl opt">-&gt;</span>cmd<span class="hl opt">-&gt;</span>str<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">procman_close_dead_pipes</span> <span class="hl opt">(</span>pm<span class="hl opt">,</span> cmd<span class="hl opt">);</span>
+
+    <span class="hl slc">// remove and free</span>
+    pm<span class="hl opt">-&gt;</span>commands <span class="hl opt">=</span> <span class="hl kwd">g_list_remove_link</span> <span class="hl opt">(</span>pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">,</span> toremove<span class="hl opt">);</span>
+    <span class="hl kwd">g_list_free_1</span> <span class="hl opt">(</span>toremove<span class="hl opt">);</span>
+    <span class="hl kwd">procman_cmd_destroy</span> <span class="hl opt">(</span>cmd<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int32_t</span>
+<span class="hl kwd">procman_get_cmd_status</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> procman_cmd_t <span class="hl opt">*</span>cmd<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>pid <span class="hl opt">&gt;</span> <span class="hl num">0</span><span class="hl opt">)</span> <span class="hl kwa">return</span> PROCMAN_CMD_RUNNING<span class="hl opt">;</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>pid <span class="hl opt">==</span> <span class="hl num">0</span><span class="hl opt">)</span> <span class="hl kwa">return</span> PROCMAN_CMD_STOPPED<span class="hl opt">;</span>
+
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+procman_cmd_t <span class="hl opt">*</span>
+<span class="hl kwd">procman_find_cmd</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>cmd_str<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GList <span class="hl opt">*</span>iter<span class="hl opt">;</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>iter<span class="hl opt">=</span>pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">;</span> iter<span class="hl opt">;</span> iter<span class="hl opt">=</span>iter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+        procman_cmd_t <span class="hl opt">*</span>p <span class="hl opt">= (</span>procman_cmd_t<span class="hl opt">*)</span>iter<span class="hl opt">-&gt;</span>data<span class="hl opt">;</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">strcmp</span> <span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>cmd<span class="hl opt">-&gt;</span>str<span class="hl opt">,</span> cmd_str<span class="hl opt">))</span> <span class="hl kwa">return</span> p<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+procman_cmd_t <span class="hl opt">*</span>
+<span class="hl kwd">procman_find_cmd_by_id</span> <span class="hl opt">(</span>procman_t <span class="hl opt">*</span>pm<span class="hl opt">,</span> <span class="hl kwb">int32_t</span> cmd_id<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GList <span class="hl opt">*</span>iter<span class="hl opt">;</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>iter<span class="hl opt">=</span>pm<span class="hl opt">-&gt;</span>commands<span class="hl opt">;</span> iter<span class="hl opt">;</span> iter<span class="hl opt">=</span>iter<span class="hl opt">-&gt;</span>next<span class="hl opt">) {</span>
+        procman_cmd_t <span class="hl opt">*</span>p <span class="hl opt">= (</span>procman_cmd_t<span class="hl opt">*)</span>iter<span class="hl opt">-&gt;</span>data<span class="hl opt">;</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>p<span class="hl opt">-&gt;</span>cmd_id <span class="hl opt">==</span> cmd_id<span class="hl opt">)</span> <span class="hl kwa">return</span> p<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span>
+<span class="hl kwd">procman_cmd_change_str</span> <span class="hl opt">(</span>procman_cmd_t <span class="hl opt">*</span>cmd<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>cmd_str<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">g_string_assign</span> <span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>cmd<span class="hl opt">,</span> cmd_str<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span>
+<span class="hl kwd">procman_cmd_set_name</span><span class="hl opt">(</span>procman_cmd_t<span class="hl opt">*</span> cmd<span class="hl opt">,</span> <span class="hl kwb">const char</span><span class="hl opt">*</span> cmd_name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">g_free</span><span class="hl opt">(</span>cmd<span class="hl opt">-&gt;</span>cmd_name<span class="hl opt">);</span>
+    cmd<span class="hl opt">-&gt;</span>cmd_name <span class="hl opt">=</span> <span class="hl kwd">g_strdup</span><span class="hl opt">(</span>cmd_name<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->

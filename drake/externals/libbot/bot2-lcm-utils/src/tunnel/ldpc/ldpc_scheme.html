@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/libbot/bot2-lcm-utils/src/tunnel/ldpc/ldpc_scheme.cpp</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl com">/* $Id: ldpc_scheme.cpp,v 1.13 2006/09/06 14:55:39 roca Exp $ */</span>
+<span class="hl com">/* </span>
+<span class="hl com"> *  LDPC/LDGM FEC Scheme.</span>
+<span class="hl com"> *  (c) Copyright 2002-2006 INRIA - All rights reserved</span>
+<span class="hl com"> *  Main authors: Christoph Neumann (christoph.neumann&#64;inrialpes.fr)</span>
+<span class="hl com"> *                Vincent Roca      (vincent.roca&#64;inrialpes.fr)</span>
+<span class="hl com"> *</span>
+<span class="hl com"> *  This copyright notice must be retained and prominently displayed,</span>
+<span class="hl com"> *  along with a note saying that the original programs are available from</span>
+<span class="hl com"> *  Vincent Roca's web page, and note is made of any changes made to these</span>
+<span class="hl com"> *  programs.  </span>
+<span class="hl com"> *</span>
+<span class="hl com"> *  This library is free software; you can redistribute it and/or</span>
+<span class="hl com"> *  modify it under the terms of the GNU Lesser General Public</span>
+<span class="hl com"> *  License as published by the Free Software Foundation; either</span>
+<span class="hl com"> *  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> *  This library is distributed in the hope that it will be useful,</span>
+<span class="hl com"> *  but WITHOUT ANY WARRANTY; without even the implied warranty of</span>
+<span class="hl com"> *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU</span>
+<span class="hl com"> *  Lesser General Public License for more details.</span>
+<span class="hl com"> *</span>
+<span class="hl com"> *  You should have received a copy of the GNU Lesser General Public</span>
+<span class="hl com"> *  License along with this library; if not, write to the Free Software</span>
+<span class="hl com"> *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA</span>
+<span class="hl com"> */</span>
+ 
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;ldpc_fec.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;macros.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;ldpc_scheme.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;ldpc_rand.h&quot;</span><span class="hl ppc"></span>
+
+
+<span class="hl com">/******************************************************************************</span>
+<span class="hl com"> * LDPCFecScheme Contructor.</span>
+<span class="hl com"> */</span>
+LDPCFecScheme<span class="hl opt">::</span><span class="hl kwd">LDPCFecScheme</span><span class="hl opt">()</span>
+<span class="hl opt">{</span>
+	<span class="hl kwd">memset</span><span class="hl opt">(</span><span class="hl kwa">this</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(*</span><span class="hl kwa">this</span><span class="hl opt">));</span>
+<span class="hl opt">}</span>
+ 
+ 
+<span class="hl com">/******************************************************************************</span>
+<span class="hl com"> * LDPCFecScheme Destructor.</span>
+<span class="hl com"> */</span>
+LDPCFecScheme<span class="hl opt">::~</span><span class="hl kwd">LDPCFecScheme</span><span class="hl opt">()</span>
+<span class="hl opt">{</span>
+	<span class="hl kwa">if</span><span class="hl opt">(</span>m_ESItoTxseq<span class="hl opt">)</span>
+		<span class="hl kwd">free</span><span class="hl opt">(</span>m_ESItoTxseq<span class="hl opt">);</span>
+
+	<span class="hl kwa">if</span><span class="hl opt">(</span>m_txseqToESI<span class="hl opt">)</span>
+		<span class="hl kwd">free</span><span class="hl opt">(</span>m_txseqToESI<span class="hl opt">);</span>
+
+	<span class="hl slc">// and now init everything!</span>
+	<span class="hl kwd">memset</span><span class="hl opt">(</span><span class="hl kwa">this</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(*</span><span class="hl kwa">this</span><span class="hl opt">));</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl com">/******************************************************************************</span>
+<span class="hl com"> * =&gt; See header file for more informations.</span>
+<span class="hl com"> */</span>
+ldpc_error_status 
+LDPCFecScheme<span class="hl opt">::</span><span class="hl kwd">DetermineSymbolSize</span> <span class="hl opt">(</span>INT64	objectSize<span class="hl opt">,</span>
+				    <span class="hl kwb">int</span>		pktSize<span class="hl opt">,</span>
+				    <span class="hl kwb">int</span>		<span class="hl opt">*</span>symbolSize<span class="hl opt">,</span>
+				    <span class="hl kwb">int</span>		<span class="hl opt">*</span>nbSourceSymbols<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+	<span class="hl kwb">int</span>	nbPkt<span class="hl opt">;</span>		<span class="hl slc">// number of packet for this object</span>
+	<span class="hl kwb">int</span>	ss<span class="hl opt">;</span>		<span class="hl slc">// optimal symbol size</span>
+	nbPkt <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">)</span><span class="hl kwd">ceil</span><span class="hl opt">((</span><span class="hl kwb">double</span><span class="hl opt">)</span>objectSize <span class="hl opt">/ (</span><span class="hl kwb">double</span><span class="hl opt">)</span>pktSize<span class="hl opt">);</span>
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>nbPkt <span class="hl opt">&gt;=</span> <span class="hl num">4000</span><span class="hl opt">) {</span>
+		ss <span class="hl opt">=</span> pktSize<span class="hl opt">;</span>
+	<span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>nbPkt <span class="hl opt">&gt;=</span> <span class="hl num">2000</span><span class="hl opt">) {</span>
+		<span class="hl slc">// target: at least 4000 symbols</span>
+		<span class="hl kwa">if</span> <span class="hl opt">((</span>pktSize <span class="hl opt">%</span> <span class="hl num">2</span><span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+			<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span>
+			<span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, pktSize (%d bytes) IS NOT multiple of 2</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pktSize<span class="hl opt">);</span>
+			<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+		ss <span class="hl opt">=</span> pktSize <span class="hl opt">&gt;&gt;</span> <span class="hl num">1</span><span class="hl opt">;</span>
+<span class="hl ppc">#if 0</span>
+		<span class="hl kwa">if</span> <span class="hl opt">((</span>ss <span class="hl opt">%</span> <span class="hl num">4</span><span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+			<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span>
+			<span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, pktSize (%d bytes) IS NOT multiple of 8 and the resulting symbolSize (%d bytes) IS NOT multiple of 4</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pktSize<span class="hl opt">,</span> ss<span class="hl opt">);</span>
+			<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+<span class="hl ppc">#endif</span>
+	<span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>nbPkt <span class="hl opt">&gt;=</span> <span class="hl num">1000</span><span class="hl opt">) {</span>
+		<span class="hl slc">// target: at least 4000 symbols</span>
+		<span class="hl kwa">if</span> <span class="hl opt">((</span>pktSize <span class="hl opt">%</span> <span class="hl num">4</span><span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+			<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span>
+			<span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, pktSize (%d bytes) IS NOT multiple of 4</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pktSize<span class="hl opt">);</span>
+			<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+		ss <span class="hl opt">=</span> pktSize <span class="hl opt">&gt;&gt;</span> <span class="hl num">2</span><span class="hl opt">;</span>
+<span class="hl ppc">#if 0</span>
+		<span class="hl kwa">if</span> <span class="hl opt">((</span>ss <span class="hl opt">%</span> <span class="hl num">4</span><span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+			<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span>
+			<span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, pktSize (%d bytes) IS NOT multiple of 16 and the resulting symbolSize (%d bytes) IS NOT multiple of 4</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pktSize<span class="hl opt">,</span> ss<span class="hl opt">);</span>
+			<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+<span class="hl ppc">#endif</span>
+	<span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>nbPkt <span class="hl opt">&gt;=</span> <span class="hl num">500</span><span class="hl opt">) {</span>
+		<span class="hl slc">// target: at least 4000 symbols</span>
+		<span class="hl kwa">if</span> <span class="hl opt">((</span>pktSize <span class="hl opt">%</span> <span class="hl num">8</span><span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+			<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span>
+			<span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, pktSize (%d bytes) IS NOT multiple of 8</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pktSize<span class="hl opt">);</span>
+			<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+		ss <span class="hl opt">=</span> pktSize <span class="hl opt">&gt;&gt;</span> <span class="hl num">3</span><span class="hl opt">;</span>
+<span class="hl ppc">#if 0</span>
+		<span class="hl kwa">if</span> <span class="hl opt">((</span>ss <span class="hl opt">%</span> <span class="hl num">4</span><span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+			<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span>
+			<span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, pktSize (%d bytes) IS NOT multiple of 32 and the resulting symbolSize (%d bytes) IS NOT multiple of 4</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pktSize<span class="hl opt">,</span> ss<span class="hl opt">);</span>
+			<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+<span class="hl ppc">#endif</span>
+	<span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+		<span class="hl kwa">if</span> <span class="hl opt">((</span>pktSize <span class="hl opt">%</span> <span class="hl num">16</span><span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+			<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span>
+			<span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, pktSize (%d bytes) IS NOT multiple of 16</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pktSize<span class="hl opt">);</span>
+			<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+		ss <span class="hl opt">=</span> pktSize <span class="hl opt">&gt;&gt;</span> <span class="hl num">4</span><span class="hl opt">;</span>
+<span class="hl ppc">#if 0</span>
+		<span class="hl kwa">if</span> <span class="hl opt">((</span>ss <span class="hl opt">%</span> <span class="hl num">4</span><span class="hl opt">) !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+			<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span>
+			<span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, pktSize (%d bytes) IS NOT multiple of 64 and the resulting symbolSize (%d bytes) IS NOT multiple of 4</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> pktSize<span class="hl opt">,</span> ss<span class="hl opt">);</span>
+			<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+<span class="hl ppc">#endif</span>
+	<span class="hl opt">}</span>
+	<span class="hl opt">*</span>symbolSize <span class="hl opt">=</span> ss<span class="hl opt">;</span>
+	<span class="hl opt">*</span>nbSourceSymbols <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">)</span><span class="hl kwd">ceil</span><span class="hl opt">((</span><span class="hl kwb">double</span><span class="hl opt">)</span>objectSize <span class="hl opt">/ (</span><span class="hl kwb">double</span><span class="hl opt">)</span>ss<span class="hl opt">);</span>
+	<span class="hl kwa">return</span> LDPC_OK<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl com">/******************************************************************************</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * =&gt; See header file for more informations.</span>
+<span class="hl com"> */</span>
+ldpc_error_status 
+LDPCFecScheme<span class="hl opt">::</span><span class="hl kwd">InitScheme</span>  <span class="hl opt">(</span><span class="hl kwb">int</span>	symbolSize<span class="hl opt">,</span>
+			    <span class="hl kwb">int</span>	pktSize<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+	<span class="hl kwb">int</span>	randInd <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+	<span class="hl kwb">int</span>	backup <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>m_initialized <span class="hl opt">==</span> <span class="hl kwa">false</span><span class="hl opt">) {</span>
+		<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, LDPC Session needs to be initialized before</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+		<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+	<span class="hl opt">}</span>
+
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>m_SchemeInitialized <span class="hl opt">==</span> <span class="hl kwa">true</span><span class="hl opt">) {</span>
+		<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, Scheme has already been initialized</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+		<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+	<span class="hl opt">}</span>
+
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>pktSize <span class="hl opt">&lt;</span> symbolSize<span class="hl opt">) {</span>
+		<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, bad packet size %d; must be at least be equal to the symbol size %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+			pktSize<span class="hl opt">,</span> symbolSize<span class="hl opt">);</span>
+		<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+	<span class="hl opt">}</span>
+
+	m_symbolSize <span class="hl opt">=</span> symbolSize<span class="hl opt">;</span>
+	m_pktSize <span class="hl opt">=</span> pktSize<span class="hl opt">;</span>
+
+	m_nbSymbolsPerPkt <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">)</span> <span class="hl kwd">floor</span><span class="hl opt">((</span><span class="hl kwb">double</span><span class="hl opt">)</span> m_pktSize<span class="hl opt">/(</span><span class="hl kwb">double</span><span class="hl opt">)</span> m_symbolSize<span class="hl opt">);</span>
+	m_nbSourcePkts 	<span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">)</span> <span class="hl kwd">ceil</span><span class="hl opt">((</span><span class="hl kwb">double</span><span class="hl opt">)</span> m_nbSourceSymbols<span class="hl opt">/(</span><span class="hl kwb">double</span><span class="hl opt">)</span> m_nbSymbolsPerPkt<span class="hl opt">);</span>
+	m_nbParityPkts	<span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">)</span> <span class="hl kwd">ceil</span><span class="hl opt">((</span><span class="hl kwb">double</span><span class="hl opt">)</span> m_nbParitySymbols<span class="hl opt">/(</span><span class="hl kwb">double</span><span class="hl opt">)</span> m_nbSymbolsPerPkt<span class="hl opt">);</span>	
+
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>m_nbSymbolsPerPkt <span class="hl opt">==</span> <span class="hl num">1</span><span class="hl opt">) {</span>
+		<span class="hl kwa">if</span> <span class="hl opt">(</span>m_pktSize <span class="hl opt">!=</span> m_symbolSize<span class="hl opt">) {</span>
+			<span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;LDPCFecScheme::InitScheme: ERROR, pktSize %d is not equal to symbolSize %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+				m_pktSize<span class="hl opt">,</span> m_symbolSize<span class="hl opt">);</span>
+			<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+		<span class="hl slc">// We do not want to randomize the ESI &lt;-&gt; PktIDx.</span>
+	<span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+		<span class="hl slc">// init the two tables that map esi &lt;-&gt; txsequence</span>
+		m_ESItoTxseq <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span>m_nbParitySymbols<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">int</span><span class="hl opt">));</span>
+		m_txseqToESI <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span>m_nbParitySymbols<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">int</span><span class="hl opt">));</span>
+
+		<span class="hl kwa">for</span><span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> m_nbParitySymbols<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+			m_ESItoTxseq<span class="hl opt">[</span>i<span class="hl opt">] =</span> i<span class="hl opt">;</span>
+			m_txseqToESI<span class="hl opt">[</span>i<span class="hl opt">] =</span> i<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+		<span class="hl kwa">for</span><span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> m_nbParitySymbols<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+			backup			<span class="hl opt">=</span> m_ESItoTxseq<span class="hl opt">[</span>i<span class="hl opt">];</span>
+			randInd			<span class="hl opt">=</span> <span class="hl kwd">ldpc_rand</span><span class="hl opt">(</span>m_nbParitySymbols<span class="hl opt">);</span>
+			m_ESItoTxseq<span class="hl opt">[</span>i<span class="hl opt">]		=</span> m_ESItoTxseq<span class="hl opt">[</span>randInd<span class="hl opt">];</span>
+			m_ESItoTxseq<span class="hl opt">[</span>randInd<span class="hl opt">]	=</span> backup<span class="hl opt">;</span>
+			m_txseqToESI<span class="hl opt">[</span>m_ESItoTxseq<span class="hl opt">[</span>i<span class="hl opt">]]		=</span>  i<span class="hl opt">;</span>
+			m_txseqToESI<span class="hl opt">[</span>m_ESItoTxseq<span class="hl opt">[</span>randInd<span class="hl opt">]]	=</span> randInd<span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+	<span class="hl opt">}</span>
+
+	m_SchemeInitialized <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+	<span class="hl kwa">return</span> LDPC_OK<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl com">/******************************************************************************</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * =&gt; See header file for more informations.</span>
+<span class="hl com"> */</span>
+ldpc_error_status 
+LDPCFecScheme<span class="hl opt">::</span><span class="hl kwd">BuildPkt</span> <span class="hl opt">(</span><span class="hl kwb">int</span>	pktIdx<span class="hl opt">,</span>
+			 <span class="hl kwb">void</span><span class="hl opt">**</span>	pktBuffer<span class="hl opt">,</span>
+			 <span class="hl kwb">void</span><span class="hl opt">*</span>	symbol_canvas<span class="hl opt">[],</span>
+			 <span class="hl kwb">int</span><span class="hl opt">*</span>	ESIofFirstSymbol<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+	<span class="hl kwb">int</span>	j<span class="hl opt">;</span>
+
+	<span class="hl kwd">ASSERT</span><span class="hl opt">(</span>pktIdx <span class="hl opt">&gt;=</span> <span class="hl num">0</span><span class="hl opt">);</span>
+	<span class="hl kwd">ASSERT</span><span class="hl opt">(</span>pktIdx <span class="hl opt">&lt;</span> m_nbPkts<span class="hl opt">);</span>
+	<span class="hl kwd">ASSERT</span><span class="hl opt">(</span>symbol_canvas<span class="hl opt">);</span>
+	<span class="hl kwd">ASSERT</span><span class="hl opt">(</span>ESIofFirstSymbol<span class="hl opt">);</span>
+
+	<span class="hl kwa">if</span> <span class="hl opt">(*</span>pktBuffer <span class="hl opt">==</span> NULL<span class="hl opt">) {</span>
+		<span class="hl opt">*</span>pktBuffer <span class="hl opt">= (</span><span class="hl kwb">char</span><span class="hl opt">*)</span><span class="hl kwd">calloc</span><span class="hl opt">(</span>m_pktSize<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+	<span class="hl opt">}</span>
+	<span class="hl kwd">ASSERT</span><span class="hl opt">(</span>pktBuffer<span class="hl opt">);</span>
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>m_nbSymbolsPerPkt <span class="hl opt">==</span> <span class="hl num">1</span><span class="hl opt">) {</span>
+		<span class="hl com">/*</span>
+<span class="hl com">		 * simple case, one symbol per packet</span>
+<span class="hl com">		 */</span>
+		<span class="hl opt">*</span>ESIofFirstSymbol <span class="hl opt">=</span> pktIdx<span class="hl opt">;</span>
+		<span class="hl kwd">memcpy</span><span class="hl opt">((*(</span><span class="hl kwb">char</span><span class="hl opt">**)</span>pktBuffer<span class="hl opt">),</span>
+			symbol_canvas<span class="hl opt">[*</span>ESIofFirstSymbol<span class="hl opt">],</span>
+			m_symbolSize<span class="hl opt">);</span>
+	<span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+		<span class="hl com">/*</span>
+<span class="hl com">		 * complex case, several symbols per packet</span>
+<span class="hl com">		 */</span>
+		<span class="hl kwa">if</span> <span class="hl opt">(</span>pktIdx <span class="hl opt">&lt;</span> m_nbSourcePkts<span class="hl opt">) {</span>
+			<span class="hl com">/* generate a source packet */</span>
+			<span class="hl opt">*</span>ESIofFirstSymbol <span class="hl opt">= (</span>pktIdx <span class="hl opt">*</span> m_nbSymbolsPerPkt<span class="hl opt">);</span>
+			<span class="hl kwd">ASSERT</span><span class="hl opt">(*</span>ESIofFirstSymbol <span class="hl opt">&lt;</span> m_nbSourceSymbols<span class="hl opt">);</span>
+			<span class="hl kwa">for</span> <span class="hl opt">(</span>j <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> j <span class="hl opt">&lt;</span> m_nbSymbolsPerPkt<span class="hl opt">;</span> j<span class="hl opt">++) {</span>
+				<span class="hl kwd">memcpy</span><span class="hl opt">((*(</span><span class="hl kwb">char</span><span class="hl opt">**)</span>pktBuffer<span class="hl opt">) +</span> j <span class="hl opt">*</span> m_symbolSize<span class="hl opt">,</span>
+					symbol_canvas<span class="hl opt">[(</span>j <span class="hl opt">+ *</span>ESIofFirstSymbol<span class="hl opt">)</span>
+							<span class="hl opt">%</span> m_nbSourceSymbols<span class="hl opt">],</span>
+					m_symbolSize<span class="hl opt">);</span>
+			<span class="hl opt">}</span>
+		<span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+			<span class="hl com">/* generate a parity (repair) packet */</span>
+			<span class="hl opt">*</span>ESIofFirstSymbol <span class="hl opt">=</span>
+				m_nbSourceSymbols <span class="hl opt">+</span>
+				m_txseqToESI<span class="hl opt">[((</span>pktIdx <span class="hl opt">-</span> m_nbSourcePkts<span class="hl opt">) *</span> m_nbSymbolsPerPkt<span class="hl opt">)</span>
+						<span class="hl opt">%</span> m_nbParitySymbols<span class="hl opt">];</span>	
+			<span class="hl kwa">for</span> <span class="hl opt">(</span>j <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> j <span class="hl opt">&lt;</span> m_nbSymbolsPerPkt<span class="hl opt">;</span> j<span class="hl opt">++) {</span>
+				<span class="hl kwd">memcpy</span><span class="hl opt">((*(</span><span class="hl kwb">char</span><span class="hl opt">**)</span>pktBuffer<span class="hl opt">) +</span> j <span class="hl opt">*</span> m_symbolSize<span class="hl opt">,</span>
+					symbol_canvas<span class="hl opt">[</span>m_nbSourceSymbols <span class="hl opt">+</span>
+						      m_txseqToESI<span class="hl opt">[(</span>j <span class="hl opt">+ (</span>pktIdx <span class="hl opt">-</span> m_nbSourcePkts<span class="hl opt">)</span>
+								    <span class="hl opt">*</span> m_nbSymbolsPerPkt<span class="hl opt">)</span>
+								    <span class="hl opt">%</span> m_nbParitySymbols<span class="hl opt">]],</span>
+					m_symbolSize<span class="hl opt">);</span>
+			<span class="hl opt">}</span>
+		<span class="hl opt">}</span>
+	<span class="hl opt">}</span>
+	<span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwa">this</span><span class="hl opt">-&gt;</span>m_verbosity <span class="hl opt">&gt;=</span> <span class="hl num">1</span><span class="hl opt">)</span> 
+		<span class="hl kwd">printf</span><span class="hl opt">(</span><span class="hl str">&quot;LDPCFecScheme::BuildPkt: Packet %i build, with ESI %i as first symbol</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+			pktIdx<span class="hl opt">, *</span>ESIofFirstSymbol<span class="hl opt">);</span>
+	<span class="hl kwa">return</span> LDPC_OK<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl com">/******************************************************************************</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * =&gt; See header file for more informations.</span>
+<span class="hl com"> */</span>
+ldpc_error_status 
+LDPCFecScheme<span class="hl opt">::</span><span class="hl kwd">DecomposePkt</span> <span class="hl opt">(</span><span class="hl kwb">void</span><span class="hl opt">*</span> 	pktBuffer<span class="hl opt">,</span>
+			     <span class="hl kwb">int</span>	ESIofFirstSymbol<span class="hl opt">,</span>
+			     <span class="hl kwb">void</span><span class="hl opt">**</span>	GeneratedSymbols<span class="hl opt">[],</span>
+			     <span class="hl kwb">int</span><span class="hl opt">*</span>	ESIofSymbols<span class="hl opt">[])</span>
+<span class="hl opt">{</span>
+	<span class="hl kwb">int</span> j<span class="hl opt">;</span>
+
+	<span class="hl kwd">ASSERT</span><span class="hl opt">(</span>pktBuffer<span class="hl opt">);</span>
+
+	<span class="hl opt">*</span>ESIofSymbols <span class="hl opt">= (</span><span class="hl kwb">int</span><span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span>m_nbSymbolsPerPkt<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">int</span><span class="hl opt">));</span>
+	<span class="hl opt">*</span>GeneratedSymbols <span class="hl opt">= (</span><span class="hl kwb">void</span><span class="hl opt">**)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span>m_nbSymbolsPerPkt<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">void</span><span class="hl opt">*));</span>
+ 
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>m_nbSymbolsPerPkt <span class="hl opt">==</span> <span class="hl num">1</span><span class="hl opt">) {</span>
+		<span class="hl com">/*</span>
+<span class="hl com">		 * simple case, one symbol per packet</span>
+<span class="hl com">		 */</span>
+		<span class="hl opt">(*</span>ESIofSymbols<span class="hl opt">)[</span><span class="hl num">0</span><span class="hl opt">] =</span> ESIofFirstSymbol<span class="hl opt">;</span>
+		<span class="hl opt">(*</span>GeneratedSymbols<span class="hl opt">)[</span><span class="hl num">0</span><span class="hl opt">] =</span> pktBuffer<span class="hl opt">;</span>
+	<span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+		<span class="hl com">/*</span>
+<span class="hl com">		 * complex case, several symbols per packet</span>
+<span class="hl com">		 */</span>
+		<span class="hl kwa">if</span> <span class="hl opt">(</span>ESIofFirstSymbol <span class="hl opt">&lt;</span> m_nbSourceSymbols<span class="hl opt">) {</span>	
+			<span class="hl com">/* source packet */</span>
+			<span class="hl kwa">for</span> <span class="hl opt">(</span>j <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> j <span class="hl opt">&lt;</span> m_nbSymbolsPerPkt<span class="hl opt">;</span> j<span class="hl opt">++) {</span>
+				<span class="hl opt">(*</span>ESIofSymbols<span class="hl opt">)[</span>j<span class="hl opt">] = (</span>ESIofFirstSymbol <span class="hl opt">+</span> j<span class="hl opt">) %</span> m_nbSourceSymbols<span class="hl opt">;</span>
+				<span class="hl opt">(*</span>GeneratedSymbols<span class="hl opt">)[</span>j<span class="hl opt">] = ((</span><span class="hl kwb">char</span><span class="hl opt">*)</span>pktBuffer<span class="hl opt">) +</span> j <span class="hl opt">*</span> m_symbolSize<span class="hl opt">;</span>
+			<span class="hl opt">}</span>
+		<span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span> 
+			<span class="hl com">/* parity packet */</span>
+			<span class="hl kwa">for</span> <span class="hl opt">(</span>j <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> j <span class="hl opt">&lt;</span> m_nbSymbolsPerPkt<span class="hl opt">;</span> j<span class="hl opt">++) {</span>	
+				<span class="hl opt">(*</span>ESIofSymbols<span class="hl opt">)[</span>j<span class="hl opt">] =</span> m_nbSourceSymbols 
+						<span class="hl opt">+</span> m_txseqToESI<span class="hl opt">[(</span>j <span class="hl opt">+</span> m_ESItoTxseq<span class="hl opt">[</span>ESIofFirstSymbol
+								<span class="hl opt">-</span> m_nbSourceSymbols<span class="hl opt">]) %</span> m_nbParitySymbols<span class="hl opt">];</span>
+				<span class="hl opt">(*</span>GeneratedSymbols<span class="hl opt">)[</span>j<span class="hl opt">] = ((</span><span class="hl kwb">char</span><span class="hl opt">*)</span>pktBuffer<span class="hl opt">) +</span> j <span class="hl opt">*</span> m_symbolSize<span class="hl opt">;</span>
+			<span class="hl opt">}</span>
+		<span class="hl opt">}</span>
+	<span class="hl opt">}</span>
+	<span class="hl kwa">return</span> LDPC_OK<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl com">/******************************************************************************</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * =&gt; See header file for more informations.</span>
+<span class="hl com"> */</span>
+ldpc_error_status 
+LDPCFecScheme<span class="hl opt">::</span><span class="hl kwd">DecodingStepWithPkt</span> <span class="hl opt">(</span><span class="hl kwb">void</span><span class="hl opt">*</span>	symbol_canvas<span class="hl opt">[],</span>
+				    <span class="hl kwb">void</span><span class="hl opt">*</span>	pktBuffer<span class="hl opt">,</span>
+				    <span class="hl kwb">int</span>		ESIofFirstSymbol<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+	<span class="hl kwd">ASSERT</span><span class="hl opt">(</span>pktBuffer<span class="hl opt">);</span>
+	<span class="hl kwa">return</span> <span class="hl kwd">DecodingStepWithPkt</span> <span class="hl opt">(</span>symbol_canvas<span class="hl opt">,</span> pktBuffer<span class="hl opt">,</span> ESIofFirstSymbol<span class="hl opt">,</span> <span class="hl kwa">false</span><span class="hl opt">);</span>
+<span class="hl opt">}</span>				
+
+
+<span class="hl com">/******************************************************************************</span>
+<span class="hl com"> *</span>
+<span class="hl com"> * =&gt; See header file for more informations.</span>
+<span class="hl com"> */</span>
+ldpc_error_status 
+LDPCFecScheme<span class="hl opt">::</span><span class="hl kwd">DecodingStepWithPkt</span> <span class="hl opt">(</span><span class="hl kwb">void</span><span class="hl opt">*</span>	symbol_canvas<span class="hl opt">[],</span>
+				    <span class="hl kwb">void</span><span class="hl opt">*</span>	pktBuffer<span class="hl opt">,</span>
+				    <span class="hl kwb">int</span>		ESIofFirstSymbol<span class="hl opt">,</span>
+				    <span class="hl kwb">bool</span>	store_symbol<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+	<span class="hl kwb">int</span>		<span class="hl opt">*</span>ESIofSymbols <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+	<span class="hl kwb">char</span>		<span class="hl opt">**</span>generatedSymbols <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+	ldpc_error_status	err<span class="hl opt">;</span>
+
+	<span class="hl kwd">ASSERT</span><span class="hl opt">(</span>pktBuffer<span class="hl opt">);</span>
+
+	err <span class="hl opt">=</span> <span class="hl kwd">DecomposePkt</span><span class="hl opt">(</span> pktBuffer<span class="hl opt">,</span> ESIofFirstSymbol<span class="hl opt">,</span>
+				<span class="hl opt">(</span><span class="hl kwb">void</span> <span class="hl opt">***)&amp;</span>generatedSymbols<span class="hl opt">, &amp;</span>ESIofSymbols<span class="hl opt">);</span>
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>err <span class="hl opt">==</span> LDPC_ERROR<span class="hl opt">)</span>
+		<span class="hl kwa">goto</span> error<span class="hl opt">;</span>
+
+	<span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> m_nbSymbolsPerPkt<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+		err <span class="hl opt">=</span> <span class="hl kwd">DecodingStepWithSymbol</span><span class="hl opt">(</span>symbol_canvas<span class="hl opt">,</span> generatedSymbols<span class="hl opt">[</span>i<span class="hl opt">],</span>
+						ESIofSymbols<span class="hl opt">[</span>i<span class="hl opt">],</span> store_symbol<span class="hl opt">);</span>
+		<span class="hl kwa">if</span> <span class="hl opt">(</span>err <span class="hl opt">==</span> LDPC_ERROR<span class="hl opt">)</span>
+			<span class="hl kwa">goto</span> error<span class="hl opt">;</span>
+		<span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">IsDecodingComplete</span><span class="hl opt">(</span>symbol_canvas<span class="hl opt">) ==</span> <span class="hl kwa">true</span><span class="hl opt">) {</span>
+			<span class="hl slc">// no need to consider the remaining symbols</span>
+			<span class="hl kwa">break</span><span class="hl opt">;</span>
+		<span class="hl opt">}</span>
+	<span class="hl opt">}</span>
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>generatedSymbols <span class="hl opt">!=</span> NULL<span class="hl opt">)</span>
+		<span class="hl kwd">free</span><span class="hl opt">(</span>generatedSymbols<span class="hl opt">);</span>
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>ESIofSymbols <span class="hl opt">!=</span> NULL<span class="hl opt">)</span> 
+		<span class="hl kwd">free</span><span class="hl opt">(</span>ESIofSymbols<span class="hl opt">);</span>	
+	<span class="hl kwa">return</span> LDPC_OK<span class="hl opt">;</span>
+
+error<span class="hl opt">:</span>
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>generatedSymbols <span class="hl opt">!=</span> NULL<span class="hl opt">)</span>
+		<span class="hl kwd">free</span><span class="hl opt">(</span>generatedSymbols<span class="hl opt">);</span>
+	<span class="hl kwa">if</span> <span class="hl opt">(</span>ESIofSymbols <span class="hl opt">!=</span> NULL<span class="hl opt">)</span>
+		<span class="hl kwd">free</span><span class="hl opt">(</span>ESIofSymbols<span class="hl opt">);</span>			
+	<span class="hl kwa">return</span> LDPC_ERROR<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->

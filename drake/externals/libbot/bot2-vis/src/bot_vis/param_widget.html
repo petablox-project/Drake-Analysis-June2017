@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/libbot/bot2-vis/src/bot_vis/param_widget.c</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl ppc">#include &lt;stdarg.h&gt;</span>
+<span class="hl ppc">#include &lt;stdlib.h&gt;</span>
+<span class="hl ppc">#include &lt;string.h&gt;</span>
+<span class="hl ppc">#include &lt;math.h&gt;</span>
+
+<span class="hl ppc">#include &lt;glib.h&gt;</span>
+<span class="hl ppc">#include &lt;glib-object.h&gt;</span>
+<span class="hl ppc">#include &lt;gtk/gtk.h&gt;</span>
+<span class="hl ppc">#include &lt;gtk/gtksignal.h&gt;</span>
+
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;param_widget.h&quot;</span><span class="hl ppc"></span>
+
+<span class="hl slc">//#define dbg(args...) fprintf(stderr, args)</span>
+<span class="hl ppc">#define dbg(args...)</span>
+<span class="hl ppc">#define err(args...) fprintf(stderr, args)</span>
+
+<span class="hl kwb">struct</span> _BotGtkParamWidget
+<span class="hl opt">{</span>
+    GtkVBox vbox<span class="hl opt">;</span>
+
+    <span class="hl com">/* private */</span>
+    GHashTable <span class="hl opt">*</span>params<span class="hl opt">;</span>
+    GHashTable <span class="hl opt">*</span>widget_to_param<span class="hl opt">;</span>
+
+    GList <span class="hl opt">*</span>widgets<span class="hl opt">;</span>
+
+    <span class="hl kwb">char</span> <span class="hl opt">*</span>estr<span class="hl opt">;</span>
+<span class="hl opt">};</span>
+
+<span class="hl kwb">struct</span> _BotGtkParamWidgetClass
+<span class="hl opt">{</span>
+    GtkVBoxClass parent_class<span class="hl opt">;</span>
+<span class="hl opt">};</span>
+
+<span class="hl kwc">typedef</span> <span class="hl kwb">struct</span> _param_data <span class="hl opt">{</span>
+    <span class="hl kwb">char</span> <span class="hl opt">*</span>name<span class="hl opt">;</span>
+    GtkWidget <span class="hl opt">*</span>widget<span class="hl opt">;</span>
+
+    GType data_type<span class="hl opt">;</span>
+
+    <span class="hl kwb">double</span> min_double<span class="hl opt">;</span>
+    <span class="hl kwb">double</span> max_double<span class="hl opt">;</span>
+<span class="hl opt">}</span> param_data_t<span class="hl opt">;</span>
+
+<span class="hl kwb">static</span> param_data_t <span class="hl opt">*</span> 
+<span class="hl kwd">param_data_new</span><span class="hl opt">(</span><span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> GtkWidget <span class="hl opt">*</span>widget<span class="hl opt">,</span> GType data_type<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    param_data_t <span class="hl opt">*</span>pdata <span class="hl opt">=</span> <span class="hl kwd">g_slice_new</span><span class="hl opt">(</span>param_data_t<span class="hl opt">);</span>
+    pdata<span class="hl opt">-&gt;</span>name <span class="hl opt">=</span> <span class="hl kwd">strdup</span><span class="hl opt">(</span>name<span class="hl opt">);</span>
+    pdata<span class="hl opt">-&gt;</span>widget <span class="hl opt">=</span> widget<span class="hl opt">;</span>
+    pdata<span class="hl opt">-&gt;</span>data_type <span class="hl opt">=</span> data_type<span class="hl opt">;</span>
+    <span class="hl kwa">return</span> pdata<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">param_data_free</span><span class="hl opt">(</span>param_data_t <span class="hl opt">*</span>pdata<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">free</span><span class="hl opt">(</span>pdata<span class="hl opt">-&gt;</span>name<span class="hl opt">);</span>
+    <span class="hl kwd">g_slice_free</span><span class="hl opt">(</span>param_data_t<span class="hl opt">,</span> pdata<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">enum</span> <span class="hl opt">{</span>
+    CHANGED_SIGNAL<span class="hl opt">,</span>
+    LAST_SIGNAL
+<span class="hl opt">};</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">bot_gtk_param_widget_class_init</span> <span class="hl opt">(</span>BotGtkParamWidgetClass <span class="hl opt">*</span>klass<span class="hl opt">);</span>
+<span class="hl kwb">static void</span> <span class="hl kwd">bot_gtk_param_widget_init</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">);</span>
+<span class="hl kwb">static void</span> <span class="hl kwd">bot_gtk_param_widget_finalize</span> <span class="hl opt">(</span>GObject <span class="hl opt">*</span>obj<span class="hl opt">);</span>
+
+<span class="hl kwb">static</span> guint bot_gtk_param_widget_signals<span class="hl opt">[</span>LAST_SIGNAL<span class="hl opt">] = {</span> <span class="hl num">0</span> <span class="hl opt">};</span>
+
+<span class="hl kwd">G_DEFINE_TYPE</span> <span class="hl opt">(</span>BotGtkParamWidget<span class="hl opt">,</span> bot_gtk_param_widget<span class="hl opt">,</span> GTK_TYPE_VBOX<span class="hl opt">);</span>
+
+<span class="hl kwb">const char</span> <span class="hl opt">*</span><span class="hl kwd">bot_gtk_param_widget_get_type_str</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">) {</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span><span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl kwd">g_object_get_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>w<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">bot_gtk_param_widget_class_init</span> <span class="hl opt">(</span>BotGtkParamWidgetClass <span class="hl opt">*</span>klass<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GObjectClass <span class="hl opt">*</span>gobject_class <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_CLASS</span><span class="hl opt">(</span>klass<span class="hl opt">);</span>
+    gobject_class<span class="hl opt">-&gt;</span>finalize <span class="hl opt">=</span> bot_gtk_param_widget_finalize<span class="hl opt">;</span>
+
+    bot_gtk_param_widget_signals<span class="hl opt">[</span>CHANGED_SIGNAL<span class="hl opt">] =</span> <span class="hl kwd">g_signal_new</span><span class="hl opt">(</span><span class="hl str">&quot;changed&quot;</span><span class="hl opt">,</span>
+            <span class="hl kwd">G_TYPE_FROM_CLASS</span><span class="hl opt">(</span>klass<span class="hl opt">),</span>
+            G_SIGNAL_RUN_FIRST <span class="hl opt">|</span> G_SIGNAL_ACTION<span class="hl opt">,</span>
+            <span class="hl num">0</span><span class="hl opt">,</span>
+            NULL<span class="hl opt">,</span>
+            NULL<span class="hl opt">,</span>
+            gtk_marshal_VOID__STRING<span class="hl opt">,</span>
+            G_TYPE_NONE<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">,</span> G_TYPE_STRING<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">bot_gtk_param_widget_init</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">dbg</span> <span class="hl opt">(</span><span class="hl str">&quot;%s:%d %s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> __FILE__<span class="hl opt">,</span> __LINE__<span class="hl opt">,</span> __FUNCTION__<span class="hl opt">);</span>
+
+    pw<span class="hl opt">-&gt;</span>widgets <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    pw<span class="hl opt">-&gt;</span>params <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_new</span><span class="hl opt">(</span>g_str_hash<span class="hl opt">,</span> g_str_equal<span class="hl opt">);</span>
+    pw<span class="hl opt">-&gt;</span>widget_to_param <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_new_full</span><span class="hl opt">(</span>g_direct_hash<span class="hl opt">,</span> g_direct_equal<span class="hl opt">,</span>
+            NULL<span class="hl opt">, (</span>GDestroyNotify<span class="hl opt">)</span>param_data_free<span class="hl opt">);</span>
+    pw<span class="hl opt">-&gt;</span>estr <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">bot_gtk_param_widget_finalize</span> <span class="hl opt">(</span>GObject <span class="hl opt">*</span>obj<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    BotGtkParamWidget <span class="hl opt">*</span>pw <span class="hl opt">=</span> <span class="hl kwd">BOT_GTK_PARAM_WIDGET</span> <span class="hl opt">(</span>obj<span class="hl opt">);</span>
+    <span class="hl kwd">dbg</span> <span class="hl opt">(</span><span class="hl str">&quot;%s:%d %s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> __FILE__<span class="hl opt">,</span> __LINE__<span class="hl opt">,</span> __FUNCTION__<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>estr<span class="hl opt">) {</span>
+        <span class="hl kwd">free</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>estr<span class="hl opt">);</span>
+        pw<span class="hl opt">-&gt;</span>estr <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">G_OBJECT_CLASS</span> <span class="hl opt">(</span>bot_gtk_param_widget_parent_class<span class="hl opt">)-&gt;</span><span class="hl kwd">finalize</span><span class="hl opt">(</span>obj<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+GtkWidget <span class="hl opt">*</span>
+<span class="hl kwd">bot_gtk_param_widget_new</span> <span class="hl opt">(</span><span class="hl kwb">void</span><span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">return</span> <span class="hl kwd">GTK_WIDGET</span> <span class="hl opt">(</span><span class="hl kwd">g_object_new</span> <span class="hl opt">(</span>BOT_GTK_TYPE_PARAM_WIDGET<span class="hl opt">,</span> NULL<span class="hl opt">));</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static</span> <span class="hl kwc">inline</span> param_data_t <span class="hl opt">*</span> 
+<span class="hl kwd">get_param_data</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span> pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+    <span class="hl kwa">if</span><span class="hl opt">(!</span>w<span class="hl opt">)</span>
+        <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+    param_data_t <span class="hl opt">*</span>pd <span class="hl opt">=</span> 
+        <span class="hl opt">(</span>param_data_t<span class="hl opt">*)</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widget_to_param<span class="hl opt">,</span> w<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> pd<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static</span> <span class="hl kwc">inline</span> param_data_t <span class="hl opt">*</span> 
+<span class="hl kwd">get_param_data_check_type</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span> pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> GType data_type<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+    <span class="hl kwa">if</span><span class="hl opt">(!</span>w<span class="hl opt">)</span>
+        <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+    param_data_t <span class="hl opt">*</span>pd <span class="hl opt">=</span> 
+        <span class="hl opt">(</span>param_data_t<span class="hl opt">*)</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widget_to_param<span class="hl opt">,</span> w<span class="hl opt">);</span>
+    <span class="hl kwa">if</span><span class="hl opt">(</span>pd<span class="hl opt">-&gt;</span>data_type <span class="hl opt">!=</span> data_type<span class="hl opt">) {</span>
+        <span class="hl kwd">g_warning</span><span class="hl opt">(</span><span class="hl str">&quot;bot_gtk_param_widget:  param [%s] is not type %s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+                name<span class="hl opt">,</span> <span class="hl kwd">g_type_name</span><span class="hl opt">(</span>data_type<span class="hl opt">));</span>
+        <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> pd<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">return</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">) !=</span> NULL<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">generic_widget_changed</span> <span class="hl opt">(</span>GtkWidget <span class="hl opt">*</span>w<span class="hl opt">,</span> gpointer user_data<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    BotGtkParamWidget <span class="hl opt">*</span>pw <span class="hl opt">=</span> <span class="hl kwd">BOT_GTK_PARAM_WIDGET</span><span class="hl opt">(</span>user_data<span class="hl opt">);</span>
+    param_data_t <span class="hl opt">*</span>pd <span class="hl opt">=</span> 
+        <span class="hl opt">(</span>param_data_t<span class="hl opt">*)</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widget_to_param<span class="hl opt">,</span> w<span class="hl opt">);</span>
+    <span class="hl kwd">g_signal_emit</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span> <span class="hl opt">(</span>pw<span class="hl opt">),</span> 
+            bot_gtk_param_widget_signals<span class="hl opt">[</span>CHANGED_SIGNAL<span class="hl opt">],</span> <span class="hl num">0</span><span class="hl opt">,</span> pd<span class="hl opt">-&gt;</span>name<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static</span> param_data_t <span class="hl opt">*</span> 
+<span class="hl kwd">add_row</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span>
+        GtkWidget <span class="hl opt">*</span>w<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>signal_name<span class="hl opt">,</span> GType data_type<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GtkWidget <span class="hl opt">*</span>hb <span class="hl opt">=</span> <span class="hl kwd">gtk_hbox_new</span> <span class="hl opt">(</span>FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    GtkWidget <span class="hl opt">*</span>lbl <span class="hl opt">=</span> <span class="hl kwd">gtk_label_new</span> <span class="hl opt">(</span>name<span class="hl opt">);</span>
+    <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span> <span class="hl opt">(</span>hb<span class="hl opt">),</span> lbl<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span> <span class="hl opt">(</span>hb<span class="hl opt">),</span> w<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span> <span class="hl opt">(&amp;</span>pw<span class="hl opt">-&gt;</span>vbox<span class="hl opt">),</span> hb<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+    pw<span class="hl opt">-&gt;</span>widgets <span class="hl opt">=</span> <span class="hl kwd">g_list_append</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widgets<span class="hl opt">,</span> hb<span class="hl opt">);</span>
+    pw<span class="hl opt">-&gt;</span>widgets <span class="hl opt">=</span> <span class="hl kwd">g_list_append</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widgets<span class="hl opt">,</span> lbl<span class="hl opt">);</span>
+    pw<span class="hl opt">-&gt;</span>widgets <span class="hl opt">=</span> <span class="hl kwd">g_list_append</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widgets<span class="hl opt">,</span> w<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_hash_table_insert</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">, (</span>gpointer<span class="hl opt">)</span>name<span class="hl opt">,</span> w<span class="hl opt">);</span>
+
+    param_data_t <span class="hl opt">*</span>pdata <span class="hl opt">=</span> <span class="hl kwd">param_data_new</span><span class="hl opt">(</span>name<span class="hl opt">,</span> w<span class="hl opt">,</span> data_type<span class="hl opt">);</span>
+    <span class="hl kwd">g_hash_table_insert</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widget_to_param<span class="hl opt">,</span> w<span class="hl opt">,</span> pdata<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>signal_name <span class="hl opt">&amp;&amp;</span> <span class="hl kwd">strlen</span> <span class="hl opt">(</span>signal_name<span class="hl opt">)) {</span>
+        <span class="hl kwd">g_signal_connect</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>w<span class="hl opt">),</span> signal_name<span class="hl opt">,</span>
+                <span class="hl kwd">G_CALLBACK</span> <span class="hl opt">(</span>generic_widget_changed<span class="hl opt">),</span> pw<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">gtk_widget_show_all</span> <span class="hl opt">(</span>hb<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> pdata<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span>
+<span class="hl kwd">bot_gtk_param_widget_add_int</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> 
+        BotGtkParamWidgetUIHint ui_hints<span class="hl opt">,</span>
+        <span class="hl kwb">int</span> min<span class="hl opt">,</span> <span class="hl kwb">int</span> max<span class="hl opt">,</span> <span class="hl kwb">int</span> increment<span class="hl opt">,</span> <span class="hl kwb">int</span> initial_value<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">))</span> <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>min <span class="hl opt">&gt;=</span> max <span class="hl opt">||</span> initial_value <span class="hl opt">&lt;</span> min <span class="hl opt">||</span> initial_value <span class="hl opt">&gt;</span> max<span class="hl opt">) {</span>
+        <span class="hl kwd">err</span><span class="hl opt">(</span><span class="hl str">&quot;WARNING: param_widget_add_int - invalid args</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl kwa">switch</span><span class="hl opt">(</span>ui_hints<span class="hl opt">) {</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_SPINBOX<span class="hl opt">:</span>
+            w <span class="hl opt">=</span> <span class="hl kwd">gtk_spin_button_new_with_range</span> <span class="hl opt">(</span>min<span class="hl opt">,</span> max<span class="hl opt">,</span> increment<span class="hl opt">);</span>
+            <span class="hl kwd">gtk_spin_button_set_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_SPIN_BUTTON</span><span class="hl opt">(</span>w<span class="hl opt">),</span> initial_value<span class="hl opt">);</span>
+            <span class="hl kwa">break</span><span class="hl opt">;</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_SLIDER<span class="hl opt">:</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_DEFAULTS<span class="hl opt">:</span>
+            w <span class="hl opt">=</span> <span class="hl kwd">gtk_hscale_new_with_range</span> <span class="hl opt">(</span>min<span class="hl opt">,</span> max<span class="hl opt">,</span> increment<span class="hl opt">);</span>
+            <span class="hl kwd">gtk_range_set_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>w<span class="hl opt">),</span> initial_value<span class="hl opt">);</span>
+            <span class="hl kwa">break</span><span class="hl opt">;</span>
+        <span class="hl kwa">default</span><span class="hl opt">:</span>
+            <span class="hl kwd">err</span><span class="hl opt">(</span><span class="hl str">&quot;ERROR: param_widget_add_int - bad ui_hints</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+            <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span> 
+    <span class="hl kwd">g_object_set_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>w<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;int&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwd">add_row</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">,</span> w<span class="hl opt">,</span> <span class="hl str">&quot;value-changed&quot;</span><span class="hl opt">,</span> G_TYPE_INT<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">double</span> <span class="hl kwd">bot_gtk_param_widget_get_min_double</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">);</span>
+<span class="hl kwb">double</span> 
+<span class="hl kwd">bot_gtk_param_widget_get_min_double</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    param_data_t <span class="hl opt">*</span>pdata <span class="hl opt">=</span> <span class="hl kwd">get_param_data_check_type</span><span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">,</span> G_TYPE_DOUBLE<span class="hl opt">);</span>
+    <span class="hl kwa">if</span><span class="hl opt">(!</span>pdata<span class="hl opt">)</span>
+        <span class="hl kwa">return</span> NAN<span class="hl opt">;</span>
+    <span class="hl kwa">return</span> pdata<span class="hl opt">-&gt;</span>min_double<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">double</span> <span class="hl kwd">bot_gtk_param_widget_get_max_double</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">);</span>
+<span class="hl kwb">double</span> 
+<span class="hl kwd">bot_gtk_param_widget_get_max_double</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    param_data_t <span class="hl opt">*</span>pdata <span class="hl opt">=</span> <span class="hl kwd">get_param_data_check_type</span><span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">,</span> G_TYPE_DOUBLE<span class="hl opt">);</span>
+    <span class="hl kwa">if</span><span class="hl opt">(!</span>pdata<span class="hl opt">)</span>
+        <span class="hl kwa">return</span> NAN<span class="hl opt">;</span>
+    <span class="hl kwa">return</span> pdata<span class="hl opt">-&gt;</span>max_double<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">bot_gtk_param_widget_add_double</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> BotGtkParamWidgetUIHint ui_hints<span class="hl opt">,</span> 
+        <span class="hl kwb">double</span> min<span class="hl opt">,</span> <span class="hl kwb">double</span> max<span class="hl opt">,</span> <span class="hl kwb">double</span> increment<span class="hl opt">,</span> <span class="hl kwb">double</span> initial_value<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">))</span> <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>min <span class="hl opt">&gt;=</span> max <span class="hl opt">||</span> initial_value <span class="hl opt">&lt;</span> min <span class="hl opt">||</span> initial_value <span class="hl opt">&gt;</span> max<span class="hl opt">) {</span>
+        <span class="hl kwd">err</span><span class="hl opt">(</span><span class="hl str">&quot;WARNING: param_widget_add_double - invalid args</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl kwa">switch</span><span class="hl opt">(</span>ui_hints<span class="hl opt">) {</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_SPINBOX<span class="hl opt">:</span>
+            w <span class="hl opt">=</span> <span class="hl kwd">gtk_spin_button_new_with_range</span> <span class="hl opt">(</span>min<span class="hl opt">,</span> max<span class="hl opt">,</span> increment<span class="hl opt">);</span>
+            <span class="hl kwd">gtk_spin_button_set_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_SPIN_BUTTON</span><span class="hl opt">(</span>w<span class="hl opt">),</span> initial_value<span class="hl opt">);</span>
+            <span class="hl kwa">break</span><span class="hl opt">;</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_SLIDER<span class="hl opt">:</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_DEFAULTS<span class="hl opt">:</span>
+            w <span class="hl opt">=</span> <span class="hl kwd">gtk_hscale_new_with_range</span> <span class="hl opt">(</span>min<span class="hl opt">,</span> max<span class="hl opt">,</span> increment<span class="hl opt">);</span>
+            <span class="hl kwd">gtk_range_set_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>w<span class="hl opt">),</span> initial_value<span class="hl opt">);</span>
+            <span class="hl kwa">break</span><span class="hl opt">;</span>
+        <span class="hl kwa">default</span><span class="hl opt">:</span>
+            <span class="hl kwd">err</span><span class="hl opt">(</span><span class="hl str">&quot;ERROR: param_widget_add_double - bad ui_hints</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+            <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span> 
+    param_data_t <span class="hl opt">*</span> pdata <span class="hl opt">=</span> <span class="hl kwd">add_row</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">,</span> w<span class="hl opt">,</span> <span class="hl str">&quot;value-changed&quot;</span><span class="hl opt">,</span> 
+            G_TYPE_DOUBLE<span class="hl opt">);</span>
+    pdata<span class="hl opt">-&gt;</span>min_double <span class="hl opt">=</span> min<span class="hl opt">;</span>
+    pdata<span class="hl opt">-&gt;</span>max_double <span class="hl opt">=</span> max<span class="hl opt">;</span>
+    <span class="hl kwd">g_object_set_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>w<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;double&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">bot_gtk_param_widget_add_text_entry</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> BotGtkParamWidgetUIHint ui_hints<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>initial_value<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">))</span> <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    
+    
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl kwa">switch</span><span class="hl opt">(</span>ui_hints<span class="hl opt">) {</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_ENTRY<span class="hl opt">:</span>
+            w <span class="hl opt">=</span> <span class="hl kwd">gtk_entry_new</span> <span class="hl opt">();</span>
+            <span class="hl kwd">gtk_entry_set_text</span> <span class="hl opt">(</span><span class="hl kwd">GTK_SPIN_BUTTON</span><span class="hl opt">(</span>w<span class="hl opt">),</span> initial_value<span class="hl opt">);</span>
+            <span class="hl kwa">break</span><span class="hl opt">;</span>
+        <span class="hl kwa">default</span><span class="hl opt">:</span>
+            <span class="hl kwd">err</span><span class="hl opt">(</span><span class="hl str">&quot;ERROR: param_widget_add_text_entry - bad ui_hints</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+            <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span> 
+    param_data_t <span class="hl opt">*</span> pdata <span class="hl opt">=</span> <span class="hl kwd">add_row</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">,</span> w<span class="hl opt">,</span> <span class="hl str">&quot;value-changed&quot;</span><span class="hl opt">,</span> 
+            G_TYPE_STRING<span class="hl opt">);</span>
+    <span class="hl kwd">g_object_set_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>w<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;string&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">add_checkboxes_helper</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> GtkBox <span class="hl opt">*</span>box<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> 
+        <span class="hl kwb">int</span> checked<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">))</span> <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    GtkWidget <span class="hl opt">*</span>cb <span class="hl opt">=</span> <span class="hl kwd">gtk_check_button_new_with_label</span> <span class="hl opt">(</span>name<span class="hl opt">);</span>
+    <span class="hl kwd">gtk_toggle_button_set_active</span> <span class="hl opt">(</span><span class="hl kwd">GTK_TOGGLE_BUTTON</span> <span class="hl opt">(</span>cb<span class="hl opt">),</span> checked<span class="hl opt">);</span>
+
+    <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span> <span class="hl opt">(</span>box<span class="hl opt">),</span> cb<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+    pw<span class="hl opt">-&gt;</span>widgets <span class="hl opt">=</span> <span class="hl kwd">g_list_append</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widgets<span class="hl opt">,</span> cb<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_hash_table_insert</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">, (</span>gpointer<span class="hl opt">)</span>name<span class="hl opt">,</span> cb<span class="hl opt">);</span>
+    <span class="hl kwd">g_object_set_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>cb<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;boolean&quot;</span><span class="hl opt">);</span>
+
+    param_data_t <span class="hl opt">*</span>pd <span class="hl opt">=</span> <span class="hl kwd">param_data_new</span><span class="hl opt">(</span>name<span class="hl opt">,</span> cb<span class="hl opt">,</span> G_TYPE_BOOLEAN<span class="hl opt">);</span>
+    <span class="hl kwd">g_hash_table_insert</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widget_to_param<span class="hl opt">,</span> cb<span class="hl opt">,</span> pd<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_signal_connect</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>cb<span class="hl opt">),</span> <span class="hl str">&quot;toggled&quot;</span><span class="hl opt">,</span>
+            <span class="hl kwd">G_CALLBACK</span> <span class="hl opt">(</span>generic_widget_changed<span class="hl opt">),</span> pw<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">add_checkboxes</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> 
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name1<span class="hl opt">,</span> <span class="hl kwb">int</span> initally_checked1<span class="hl opt">,</span>
+        <span class="hl kwb">va_list</span> ap<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GtkBox <span class="hl opt">*</span>hb <span class="hl opt">=</span> <span class="hl kwd">GTK_BOX</span> <span class="hl opt">(</span><span class="hl kwd">gtk_hbox_new</span> <span class="hl opt">(</span>FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">));</span>
+
+    <span class="hl kwb">int</span> status<span class="hl opt">;</span>
+    status <span class="hl opt">=</span> <span class="hl kwd">add_checkboxes_helper</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> hb<span class="hl opt">,</span> name1<span class="hl opt">,</span> initally_checked1<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> status<span class="hl opt">)</span> <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+
+    <span class="hl kwb">int</span> i<span class="hl opt">;</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl num">10000</span><span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name <span class="hl opt">=</span> <span class="hl kwd">va_arg</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span> name <span class="hl opt">||</span> <span class="hl kwd">strlen</span> <span class="hl opt">(</span>name<span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">)</span> <span class="hl kwa">break</span><span class="hl opt">;</span>
+
+        <span class="hl kwb">int</span> checked <span class="hl opt">=</span> <span class="hl kwd">va_arg</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> <span class="hl kwb">int</span><span class="hl opt">);</span>
+
+        status <span class="hl opt">=</span> <span class="hl kwd">add_checkboxes_helper</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> hb<span class="hl opt">,</span> name<span class="hl opt">,</span> checked<span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> status<span class="hl opt">) {</span>
+            <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">gtk_widget_show_all</span> <span class="hl opt">(</span><span class="hl kwd">GTK_WIDGET</span> <span class="hl opt">(</span>hb<span class="hl opt">));</span>
+
+    <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span><span class="hl opt">(&amp;</span>pw<span class="hl opt">-&gt;</span>vbox<span class="hl opt">),</span> <span class="hl kwd">GTK_WIDGET</span><span class="hl opt">(</span>hb<span class="hl opt">),</span> TRUE<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">add_togglebuttons_helper</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> GtkBox <span class="hl opt">*</span>box<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> 
+        <span class="hl kwb">int</span> checked<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">))</span> <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    GtkWidget <span class="hl opt">*</span>tb <span class="hl opt">=</span> <span class="hl kwd">gtk_toggle_button_new_with_label</span> <span class="hl opt">(</span>name<span class="hl opt">);</span>
+    <span class="hl kwd">gtk_toggle_button_set_active</span> <span class="hl opt">(</span><span class="hl kwd">GTK_TOGGLE_BUTTON</span> <span class="hl opt">(</span>tb<span class="hl opt">),</span> checked<span class="hl opt">);</span>
+
+    <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span> <span class="hl opt">(</span>box<span class="hl opt">),</span> tb<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+    pw<span class="hl opt">-&gt;</span>widgets <span class="hl opt">=</span> <span class="hl kwd">g_list_append</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widgets<span class="hl opt">,</span> tb<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_hash_table_insert</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">, (</span>gpointer<span class="hl opt">)</span>name<span class="hl opt">,</span> tb<span class="hl opt">);</span>
+    <span class="hl kwd">g_object_set_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>tb<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;boolean&quot;</span><span class="hl opt">);</span>
+
+    param_data_t <span class="hl opt">*</span>pd <span class="hl opt">=</span> <span class="hl kwd">param_data_new</span><span class="hl opt">(</span>name<span class="hl opt">,</span> tb<span class="hl opt">,</span> G_TYPE_BOOLEAN<span class="hl opt">);</span>
+    <span class="hl kwd">g_hash_table_insert</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widget_to_param<span class="hl opt">,</span> tb<span class="hl opt">,</span> pd<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_signal_connect</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>tb<span class="hl opt">),</span> <span class="hl str">&quot;toggled&quot;</span><span class="hl opt">,</span>
+            <span class="hl kwd">G_CALLBACK</span> <span class="hl opt">(</span>generic_widget_changed<span class="hl opt">),</span> pw<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">add_togglebuttons</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> 
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name1<span class="hl opt">,</span> <span class="hl kwb">int</span> initally_checked1<span class="hl opt">,</span>
+        <span class="hl kwb">va_list</span> ap<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GtkBox <span class="hl opt">*</span>hb <span class="hl opt">=</span> <span class="hl kwd">GTK_BOX</span> <span class="hl opt">(</span><span class="hl kwd">gtk_hbox_new</span> <span class="hl opt">(</span>FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">));</span>
+
+    <span class="hl kwb">int</span> status<span class="hl opt">;</span>
+    status <span class="hl opt">=</span> <span class="hl kwd">add_togglebuttons_helper</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> hb<span class="hl opt">,</span> name1<span class="hl opt">,</span> initally_checked1<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> status<span class="hl opt">)</span> <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+
+    <span class="hl kwb">int</span> i<span class="hl opt">;</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl num">10000</span><span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name <span class="hl opt">=</span> <span class="hl kwd">va_arg</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span> name <span class="hl opt">||</span> <span class="hl kwd">strlen</span> <span class="hl opt">(</span>name<span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">)</span> <span class="hl kwa">break</span><span class="hl opt">;</span>
+
+        <span class="hl kwb">int</span> checked <span class="hl opt">=</span> <span class="hl kwd">va_arg</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> <span class="hl kwb">int</span><span class="hl opt">);</span>
+
+        status <span class="hl opt">=</span> <span class="hl kwd">add_togglebuttons_helper</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> hb<span class="hl opt">,</span> name<span class="hl opt">,</span> checked<span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> status<span class="hl opt">) {</span>
+            <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">gtk_widget_show_all</span> <span class="hl opt">(</span><span class="hl kwd">GTK_WIDGET</span> <span class="hl opt">(</span>hb<span class="hl opt">));</span>
+
+    <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span><span class="hl opt">(&amp;</span>pw<span class="hl opt">-&gt;</span>vbox<span class="hl opt">),</span> <span class="hl kwd">GTK_WIDGET</span><span class="hl opt">(</span>hb<span class="hl opt">),</span> TRUE<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">bot_gtk_param_widget_add_booleans</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> 
+        BotGtkParamWidgetUIHint ui_hints<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name1<span class="hl opt">,</span> <span class="hl kwb">int</span> initally_checked1<span class="hl opt">,</span>
+        <span class="hl opt">...)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">int</span> status <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl kwb">va_list</span> ap<span class="hl opt">;</span>
+    <span class="hl kwd">va_start</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> initally_checked1<span class="hl opt">);</span>
+
+    <span class="hl kwa">switch</span> <span class="hl opt">(</span>ui_hints<span class="hl opt">) {</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_TOGGLE_BUTTON<span class="hl opt">:</span>
+            status <span class="hl opt">=</span> <span class="hl kwd">add_togglebuttons</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name1<span class="hl opt">,</span> initally_checked1<span class="hl opt">,</span> ap<span class="hl opt">);</span>
+            <span class="hl kwa">break</span><span class="hl opt">;</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_CHECKBOX<span class="hl opt">:</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_DEFAULTS<span class="hl opt">:</span>
+            status <span class="hl opt">=</span> <span class="hl kwd">add_checkboxes</span><span class="hl opt">(</span>pw<span class="hl opt">,</span> name1<span class="hl opt">,</span> initally_checked1<span class="hl opt">,</span> ap<span class="hl opt">);</span>
+            <span class="hl kwa">break</span><span class="hl opt">;</span>
+        <span class="hl kwa">default</span><span class="hl opt">:</span>
+            <span class="hl kwd">err</span><span class="hl opt">(</span><span class="hl str">&quot;ERROR: param_widget_add_booleans - bad ui_hints</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwd">va_end</span> <span class="hl opt">(</span>ap<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">add_buttons_helper</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> GtkBox <span class="hl opt">*</span>box<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">))</span> <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    GtkWidget <span class="hl opt">*</span>b <span class="hl opt">=</span> <span class="hl kwd">gtk_button_new_with_label</span> <span class="hl opt">(</span>name<span class="hl opt">);</span>
+
+    <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span> <span class="hl opt">(</span>box<span class="hl opt">),</span> b<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+    pw<span class="hl opt">-&gt;</span>widgets <span class="hl opt">=</span> <span class="hl kwd">g_list_append</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widgets<span class="hl opt">,</span> b<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_hash_table_insert</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">, (</span>gpointer<span class="hl opt">)</span>name<span class="hl opt">,</span> b<span class="hl opt">);</span>
+    <span class="hl kwd">g_object_set_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>b<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;button&quot;</span><span class="hl opt">);</span>
+
+    param_data_t <span class="hl opt">*</span>pd <span class="hl opt">=</span> <span class="hl kwd">param_data_new</span><span class="hl opt">(</span>name<span class="hl opt">,</span> b<span class="hl opt">,</span> G_TYPE_NONE<span class="hl opt">);</span>
+    <span class="hl kwd">g_hash_table_insert</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>widget_to_param<span class="hl opt">,</span> b<span class="hl opt">,</span> pd<span class="hl opt">);</span>
+
+    <span class="hl kwd">g_signal_connect</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>b<span class="hl opt">),</span> <span class="hl str">&quot;clicked&quot;</span><span class="hl opt">,</span>
+            <span class="hl kwd">G_CALLBACK</span> <span class="hl opt">(</span>generic_widget_changed<span class="hl opt">),</span> pw<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">add_buttons</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> 
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name1<span class="hl opt">,</span> 
+        <span class="hl kwb">va_list</span> ap<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GtkBox <span class="hl opt">*</span>hb <span class="hl opt">=</span> <span class="hl kwd">GTK_BOX</span> <span class="hl opt">(</span><span class="hl kwd">gtk_hbox_new</span> <span class="hl opt">(</span>FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">));</span>
+
+    <span class="hl kwb">int</span> status<span class="hl opt">;</span>
+    status <span class="hl opt">=</span> <span class="hl kwd">add_buttons_helper</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> hb<span class="hl opt">,</span> name1<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> status<span class="hl opt">)</span> <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+
+    <span class="hl kwb">int</span> i<span class="hl opt">;</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl num">10000</span><span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name <span class="hl opt">=</span> <span class="hl kwd">va_arg</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span> name <span class="hl opt">||</span> <span class="hl kwd">strlen</span> <span class="hl opt">(</span>name<span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">)</span> <span class="hl kwa">break</span><span class="hl opt">;</span>
+
+        status <span class="hl opt">=</span> <span class="hl kwd">add_buttons_helper</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> hb<span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl num">0</span> <span class="hl opt">!=</span> status<span class="hl opt">) {</span>
+            <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">gtk_widget_show_all</span> <span class="hl opt">(</span><span class="hl kwd">GTK_WIDGET</span> <span class="hl opt">(</span>hb<span class="hl opt">));</span>
+
+    <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span><span class="hl opt">(&amp;</span>pw<span class="hl opt">-&gt;</span>vbox<span class="hl opt">),</span> <span class="hl kwd">GTK_WIDGET</span><span class="hl opt">(</span>hb<span class="hl opt">),</span> TRUE<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">bot_gtk_param_widget_add_buttons</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> 
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name1<span class="hl opt">, ...)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">int</span> status <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl kwb">va_list</span> ap<span class="hl opt">;</span>
+    <span class="hl kwd">va_start</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> name1<span class="hl opt">);</span>
+    status <span class="hl opt">=</span> <span class="hl kwd">add_buttons</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name1<span class="hl opt">,</span> ap<span class="hl opt">);</span>
+    <span class="hl kwd">va_end</span> <span class="hl opt">(</span>ap<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static int</span>
+<span class="hl kwd">_add_menu</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> <span class="hl kwb">int</span> initial_value<span class="hl opt">,</span>
+        <span class="hl kwb">int</span> noptions<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">**</span>names<span class="hl opt">,</span> <span class="hl kwb">const int</span> <span class="hl opt">*</span>values<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GtkTreeIter iter<span class="hl opt">;</span>
+
+    GtkListStore <span class="hl opt">*</span> store <span class="hl opt">=</span> <span class="hl kwd">gtk_list_store_new</span> <span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">,</span> G_TYPE_STRING<span class="hl opt">,</span> G_TYPE_INT<span class="hl opt">);</span>
+    <span class="hl kwb">int</span> selected <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+
+    <span class="hl kwb">int</span> i<span class="hl opt">;</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span>noptions<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        <span class="hl kwd">gtk_list_store_append</span> <span class="hl opt">(</span>store<span class="hl opt">, &amp;</span>iter<span class="hl opt">);</span>
+        <span class="hl kwd">gtk_list_store_set</span> <span class="hl opt">(</span>store<span class="hl opt">, &amp;</span>iter<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> names<span class="hl opt">[</span>i<span class="hl opt">],</span> <span class="hl num">1</span><span class="hl opt">,</span> values<span class="hl opt">[</span>i<span class="hl opt">], -</span><span class="hl num">1</span><span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>values<span class="hl opt">[</span>i<span class="hl opt">] ==</span> initial_value<span class="hl opt">)</span> selected <span class="hl opt">=</span> i<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    GtkWidget <span class="hl opt">*</span>mb <span class="hl opt">=</span> <span class="hl kwd">gtk_combo_box_new_with_model</span> <span class="hl opt">(</span><span class="hl kwd">GTK_TREE_MODEL</span> <span class="hl opt">(</span>store<span class="hl opt">));</span>
+    GtkCellRenderer <span class="hl opt">*</span> renderer <span class="hl opt">=</span> <span class="hl kwd">gtk_cell_renderer_text_new</span><span class="hl opt">();</span>
+    <span class="hl kwd">gtk_cell_layout_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_CELL_LAYOUT</span> <span class="hl opt">(</span>mb<span class="hl opt">),</span> renderer<span class="hl opt">,</span> TRUE<span class="hl opt">);</span>
+    <span class="hl kwd">gtk_cell_layout_add_attribute</span> <span class="hl opt">(</span><span class="hl kwd">GTK_CELL_LAYOUT</span> <span class="hl opt">(</span>mb<span class="hl opt">),</span> renderer<span class="hl opt">,</span> <span class="hl str">&quot;text&quot;</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl kwd">g_object_set</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span> <span class="hl opt">(</span>renderer<span class="hl opt">),</span> <span class="hl str">&quot;font&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;monospace&quot;</span><span class="hl opt">,</span> NULL<span class="hl opt">);</span>
+    <span class="hl kwd">g_object_unref</span> <span class="hl opt">(</span>store<span class="hl opt">);</span>
+    <span class="hl kwd">gtk_combo_box_set_active</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>mb<span class="hl opt">),</span> selected<span class="hl opt">);</span>
+
+    <span class="hl kwd">add_row</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">,</span> mb<span class="hl opt">,</span> <span class="hl str">&quot;changed&quot;</span><span class="hl opt">,</span> G_TYPE_ENUM<span class="hl opt">);</span>
+    <span class="hl kwd">g_object_set_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>mb<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;enum&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> 
+<span class="hl kwd">bot_gtk_param_widget_add_enumv</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> BotGtkParamWidgetUIHint ui_hints<span class="hl opt">,</span> <span class="hl kwb">int</span> initial_value<span class="hl opt">,</span>
+        <span class="hl kwb">int</span> noptions<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">**</span>names<span class="hl opt">,</span> <span class="hl kwb">const int</span> <span class="hl opt">*</span>values<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">switch</span> <span class="hl opt">(</span>ui_hints<span class="hl opt">) {</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_MENU<span class="hl opt">:</span>
+        <span class="hl kwa">case</span> BOT_GTK_PARAM_WIDGET_DEFAULTS<span class="hl opt">:</span>
+            <span class="hl kwa">return</span> <span class="hl kwd">_add_menu</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">,</span> initial_value<span class="hl opt">,</span> 
+                    noptions<span class="hl opt">,</span> names<span class="hl opt">,</span> values<span class="hl opt">);</span>
+            <span class="hl kwa">break</span><span class="hl opt">;</span>
+        <span class="hl kwa">default</span><span class="hl opt">:</span>
+            <span class="hl kwd">err</span><span class="hl opt">(</span><span class="hl str">&quot;ERROR: param_widget_add_enum - bad ui_hints</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> 
+<span class="hl kwd">bot_gtk_param_widget_add_enum</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> BotGtkParamWidgetUIHint ui_hints<span class="hl opt">,</span> <span class="hl kwb">int</span> initial_value<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>string1<span class="hl opt">,</span> <span class="hl kwb">int</span> value1<span class="hl opt">, ...)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwb">va_list</span> ap<span class="hl opt">;</span>
+    <span class="hl kwd">va_start</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> value1<span class="hl opt">);</span>
+
+    GPtrArray <span class="hl opt">*</span>names <span class="hl opt">=</span> <span class="hl kwd">g_ptr_array_new</span> <span class="hl opt">();</span>
+    GArray <span class="hl opt">*</span>values <span class="hl opt">=</span> <span class="hl kwd">g_array_new</span> <span class="hl opt">(</span>FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl kwa">sizeof</span> <span class="hl opt">(</span><span class="hl kwb">int</span><span class="hl opt">));</span>
+    <span class="hl kwd">g_ptr_array_add</span> <span class="hl opt">(</span>names<span class="hl opt">,</span> <span class="hl kwd">strdup</span> <span class="hl opt">(</span>string1<span class="hl opt">));</span>
+    <span class="hl kwd">g_array_append_val</span> <span class="hl opt">(</span>values<span class="hl opt">,</span> value1<span class="hl opt">);</span>
+
+    <span class="hl kwa">while</span> <span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">) {</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>str <span class="hl opt">=</span> <span class="hl kwd">va_arg</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span> str <span class="hl opt">||</span> <span class="hl kwd">strlen</span> <span class="hl opt">(</span>str<span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">)</span> <span class="hl kwa">break</span><span class="hl opt">;</span>
+        <span class="hl kwb">int</span> val <span class="hl opt">=</span> <span class="hl kwd">va_arg</span> <span class="hl opt">(</span>ap<span class="hl opt">,</span> <span class="hl kwb">int</span><span class="hl opt">);</span>
+
+        <span class="hl kwd">g_ptr_array_add</span> <span class="hl opt">(</span>names<span class="hl opt">,</span> <span class="hl kwd">strdup</span> <span class="hl opt">(</span>str<span class="hl opt">));</span>
+        <span class="hl kwd">g_array_append_val</span> <span class="hl opt">(</span>values<span class="hl opt">,</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwd">va_end</span> <span class="hl opt">(</span>ap<span class="hl opt">);</span>
+
+    <span class="hl kwb">int</span> status <span class="hl opt">=</span> <span class="hl kwd">bot_gtk_param_widget_add_enumv</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">,</span> ui_hints<span class="hl opt">,</span> 
+            initial_value<span class="hl opt">,</span> names<span class="hl opt">-&gt;</span>len<span class="hl opt">, (</span><span class="hl kwb">const char</span> <span class="hl opt">**)</span>names<span class="hl opt">-&gt;</span>pdata<span class="hl opt">,</span> 
+            <span class="hl opt">(</span><span class="hl kwb">int</span><span class="hl opt">*)</span> values<span class="hl opt">-&gt;</span>data<span class="hl opt">);</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span>values<span class="hl opt">-&gt;</span>len<span class="hl opt">;</span> i<span class="hl opt">++)</span> <span class="hl kwd">free</span> <span class="hl opt">(</span><span class="hl kwd">g_ptr_array_index</span> <span class="hl opt">(</span>names<span class="hl opt">,</span> i<span class="hl opt">));</span>
+    <span class="hl kwd">g_ptr_array_free</span> <span class="hl opt">(</span>names<span class="hl opt">,</span> TRUE<span class="hl opt">);</span>
+    <span class="hl kwd">g_array_free</span> <span class="hl opt">(</span>values<span class="hl opt">,</span> TRUE<span class="hl opt">);</span>
+
+    <span class="hl kwa">return</span> status<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">bot_gtk_param_widget_add_separator</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>text<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span>text<span class="hl opt">) {</span>
+        GtkWidget <span class="hl opt">*</span>sep <span class="hl opt">=</span> <span class="hl kwd">gtk_hseparator_new</span><span class="hl opt">();</span>
+        <span class="hl kwd">gtk_box_pack_start</span> <span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span> <span class="hl opt">(&amp;</span>pw<span class="hl opt">-&gt;</span>vbox<span class="hl opt">),</span> sep <span class="hl opt">,</span> FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_widget_show_all</span><span class="hl opt">(</span>sep<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        GtkWidget <span class="hl opt">*</span>b <span class="hl opt">=</span> <span class="hl kwd">gtk_hbox_new</span><span class="hl opt">(</span>FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_box_pack_start</span><span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span><span class="hl opt">(</span>b<span class="hl opt">),</span> <span class="hl kwd">gtk_hseparator_new</span><span class="hl opt">(),</span> TRUE<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_box_pack_start</span><span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span><span class="hl opt">(</span>b<span class="hl opt">),</span> <span class="hl kwd">gtk_label_new</span><span class="hl opt">(</span>text<span class="hl opt">),</span> FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_box_pack_start</span><span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span><span class="hl opt">(</span>b<span class="hl opt">),</span> <span class="hl kwd">gtk_hseparator_new</span><span class="hl opt">(),</span> TRUE<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_box_pack_start</span><span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span><span class="hl opt">(&amp;</span>pw<span class="hl opt">-&gt;</span>vbox<span class="hl opt">),</span> <span class="hl kwd">GTK_WIDGET</span><span class="hl opt">(</span>b<span class="hl opt">),</span> FALSE<span class="hl opt">,</span> FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_widget_show_all</span><span class="hl opt">(</span><span class="hl kwd">GTK_WIDGET</span><span class="hl opt">(</span>b<span class="hl opt">));</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> <span class="hl kwd">bot_gtk_param_widget_get_int</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_HSCALE <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwa">return</span> <span class="hl opt">(</span><span class="hl kwb">int</span><span class="hl opt">)</span> <span class="hl kwd">gtk_range_get_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span> <span class="hl opt">(</span>w<span class="hl opt">));</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span> GTK_TYPE_SPIN_BUTTON <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwa">return</span> <span class="hl opt">(</span><span class="hl kwb">int</span><span class="hl opt">)</span> <span class="hl kwd">gtk_spin_button_get_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_SPIN_BUTTON</span> <span class="hl opt">(</span>w<span class="hl opt">));</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget:  can't retrieve parameter [%s] &quot;</span>
+                <span class="hl str">&quot;as integer.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">double</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_HSCALE <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwa">return</span> <span class="hl kwd">gtk_range_get_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span> <span class="hl opt">(</span>w<span class="hl opt">));</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span> GTK_TYPE_SPIN_BUTTON <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwa">return</span> <span class="hl kwd">gtk_spin_button_get_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_SPIN_BUTTON</span> <span class="hl opt">(</span>w<span class="hl opt">));</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget:  can't retrieve parameter [%s] &quot;</span>
+                <span class="hl str">&quot;as double.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">const</span> gchar <span class="hl opt">*</span> <span class="hl kwd">bot_gtk_param_widget_get_text_entry</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span> GTK_TYPE_ENTRY <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwa">return</span> <span class="hl kwd">gtk_entry_get_text</span> <span class="hl opt">(</span><span class="hl kwd">GTK_ENTRY</span> <span class="hl opt">(</span>w<span class="hl opt">));</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget:  can't retrieve parameter [%s] &quot;</span>
+                <span class="hl str">&quot;as text.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl kwb">int</span> <span class="hl kwd">bot_gtk_param_widget_get_bool</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">GTK_IS_TOGGLE_BUTTON</span> <span class="hl opt">(</span>w<span class="hl opt">)) {</span>
+        <span class="hl kwa">return</span> <span class="hl kwd">gtk_toggle_button_get_active</span> <span class="hl opt">(</span><span class="hl kwd">GTK_TOGGLE_BUTTON</span> <span class="hl opt">(</span>w<span class="hl opt">));</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget:  can't retrieve parameter [%s] &quot;</span>
+                <span class="hl str">&quot;as boolean.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">const char</span> <span class="hl opt">*</span>
+<span class="hl kwd">bot_gtk_param_widget_get_enum_str</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>estr<span class="hl opt">) {</span>
+        <span class="hl kwd">free</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>estr<span class="hl opt">);</span>
+        pw<span class="hl opt">-&gt;</span>estr <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_COMBO_BOX <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        GtkTreeIter iter<span class="hl opt">;</span>
+        <span class="hl kwd">gtk_combo_box_get_active_iter</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">), &amp;</span>iter<span class="hl opt">);</span>
+        GtkTreeModel <span class="hl opt">*</span>model <span class="hl opt">=</span> <span class="hl kwd">gtk_combo_box_get_model</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">));</span>
+        <span class="hl kwd">gtk_tree_model_get</span> <span class="hl opt">(</span>model<span class="hl opt">, &amp;</span>iter<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">, &amp;</span>pw<span class="hl opt">-&gt;</span>estr<span class="hl opt">, -</span><span class="hl num">1</span><span class="hl opt">);</span>
+        <span class="hl kwa">return</span> pw<span class="hl opt">-&gt;</span>estr<span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget:  can't retrieve parameter [%s] &quot;</span>
+                <span class="hl str">&quot;as string.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> NULL<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> 
+<span class="hl kwd">bot_gtk_param_widget_get_enum</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    <span class="hl kwb">int</span> result<span class="hl opt">;</span>
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_COMBO_BOX <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        GtkTreeIter iter<span class="hl opt">;</span>
+        <span class="hl kwd">gtk_combo_box_get_active_iter</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">), &amp;</span>iter<span class="hl opt">);</span>
+        GtkTreeModel <span class="hl opt">*</span>model <span class="hl opt">=</span> <span class="hl kwd">gtk_combo_box_get_model</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">));</span>
+        <span class="hl kwd">gtk_tree_model_get</span> <span class="hl opt">(</span>model<span class="hl opt">, &amp;</span>iter<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">, &amp;</span>result<span class="hl opt">, -</span><span class="hl num">1</span><span class="hl opt">);</span>
+        <span class="hl kwa">return</span> result<span class="hl opt">;</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget:  can't retrieve parameter [%s] &quot;</span>
+                <span class="hl str">&quot;as string.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">bot_gtk_param_widget_set_int</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> 
+        <span class="hl kwb">int</span> val<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_SPIN_BUTTON <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwd">gtk_spin_button_set_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_SPIN_BUTTON</span><span class="hl opt">(</span>w<span class="hl opt">),</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>GTK_TYPE_HSCALE <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwd">gtk_range_set_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>w<span class="hl opt">),</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">bot_gtk_param_widget_set_double</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span>
+        <span class="hl kwb">double</span> val<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    param_data_t <span class="hl opt">*</span>pdata <span class="hl opt">=</span> <span class="hl kwd">get_param_data_check_type</span><span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">,</span> G_TYPE_DOUBLE<span class="hl opt">);</span>
+    <span class="hl kwa">if</span><span class="hl opt">(!</span>pdata<span class="hl opt">) {</span>
+        <span class="hl kwd">g_warning</span><span class="hl opt">(</span><span class="hl str">&quot;%s: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> __FUNCTION__<span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    val <span class="hl opt">=</span> <span class="hl kwd">fmin</span><span class="hl opt">(</span><span class="hl kwd">fmax</span><span class="hl opt">(</span>val<span class="hl opt">,</span> pdata<span class="hl opt">-&gt;</span>min_double<span class="hl opt">),</span> pdata<span class="hl opt">-&gt;</span>max_double<span class="hl opt">);</span>
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span><span class="hl opt">(</span>pdata<span class="hl opt">-&gt;</span>widget<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_SPIN_BUTTON <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwd">gtk_spin_button_set_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_SPIN_BUTTON</span><span class="hl opt">(</span>pdata<span class="hl opt">-&gt;</span>widget<span class="hl opt">),</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>GTK_TYPE_HSCALE <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwd">gtk_range_set_value</span> <span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>pdata<span class="hl opt">-&gt;</span>widget<span class="hl opt">),</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">bot_gtk_param_widget_set_bool</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span>
+        <span class="hl kwb">int</span> val<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_CHECK_BUTTON <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwd">gtk_toggle_button_set_active</span> <span class="hl opt">(</span><span class="hl kwd">GTK_TOGGLE_BUTTON</span><span class="hl opt">(</span>w<span class="hl opt">),</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwc">typedef</span> <span class="hl kwb">struct</span> _tree_model_match_data <span class="hl opt">{</span>
+    <span class="hl kwb">int</span> val<span class="hl opt">;</span>
+    GtkComboBox <span class="hl opt">*</span>combo<span class="hl opt">;</span>
+<span class="hl opt">}</span> tree_model_match_data_t<span class="hl opt">;</span>
+
+<span class="hl kwb">static</span> gboolean
+<span class="hl kwd">activate_if_matched</span> <span class="hl opt">(</span>GtkTreeModel <span class="hl opt">*</span>model<span class="hl opt">,</span> GtkTreePath <span class="hl opt">*</span>path<span class="hl opt">,</span> GtkTreeIter <span class="hl opt">*</span>iter<span class="hl opt">,</span>
+        <span class="hl kwb">void</span> <span class="hl opt">*</span>user_data<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    tree_model_match_data_t <span class="hl opt">*</span>md <span class="hl opt">= (</span>tree_model_match_data_t<span class="hl opt">*)</span> user_data<span class="hl opt">;</span>
+
+    <span class="hl kwb">int</span> entry_val<span class="hl opt">;</span>
+    <span class="hl kwd">gtk_tree_model_get</span> <span class="hl opt">(</span>model<span class="hl opt">,</span> iter<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">, &amp;</span>entry_val<span class="hl opt">, -</span><span class="hl num">1</span><span class="hl opt">);</span>
+    
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>entry_val <span class="hl opt">==</span> md<span class="hl opt">-&gt;</span>val<span class="hl opt">) {</span>
+        <span class="hl kwd">gtk_combo_box_set_active_iter</span> <span class="hl opt">(</span>md<span class="hl opt">-&gt;</span>combo<span class="hl opt">,</span> iter<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> TRUE<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> FALSE<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">bot_gtk_param_widget_set_enum</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span>
+        <span class="hl kwb">int</span> val<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_COMBO_BOX <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        GtkTreeModel <span class="hl opt">*</span>model <span class="hl opt">=</span> <span class="hl kwd">gtk_combo_box_get_model</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">));</span>
+        tree_model_match_data_t matchdata <span class="hl opt">= {</span>
+            val<span class="hl opt">,</span> 
+            <span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">)</span>
+        <span class="hl opt">};</span>
+        <span class="hl kwd">gtk_tree_model_foreach</span> <span class="hl opt">(</span>model<span class="hl opt">,</span> activate_if_matched<span class="hl opt">, &amp;</span>matchdata<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">bot_gtk_param_widget_set_enabled</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span>
+        <span class="hl kwb">int</span> enabled<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+    <span class="hl kwd">gtk_widget_set_sensitive</span><span class="hl opt">(</span>w<span class="hl opt">,</span> enabled<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwc">typedef</span> <span class="hl kwb">struct</span> <span class="hl opt">{</span>
+    GKeyFile <span class="hl opt">*</span>keyfile<span class="hl opt">;</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span>group_name<span class="hl opt">;</span>
+    BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">;</span>
+<span class="hl opt">}</span> _keyfile_data_t<span class="hl opt">;</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">_param_load_from_keyfile</span> <span class="hl opt">(</span><span class="hl kwb">void</span> <span class="hl opt">*</span>key<span class="hl opt">,</span> <span class="hl kwb">void</span> <span class="hl opt">*</span>value<span class="hl opt">,</span> <span class="hl kwb">void</span> <span class="hl opt">*</span>user_data<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">GTK_WIDGET</span> <span class="hl opt">(</span>value<span class="hl opt">);</span>
+    _keyfile_data_t <span class="hl opt">*</span>data <span class="hl opt">=</span> user_data<span class="hl opt">;</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span>param_name <span class="hl opt">=</span> key<span class="hl opt">;</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span>type <span class="hl opt">=</span> <span class="hl kwd">g_object_get_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>w<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">);</span>
+    GError <span class="hl opt">*</span>gerr <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span> <span class="hl opt">(</span>type<span class="hl opt">,</span> <span class="hl str">&quot;boolean&quot;</span><span class="hl opt">)) {</span>
+        gboolean val <span class="hl opt">=</span> <span class="hl kwd">g_key_file_get_boolean</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>keyfile<span class="hl opt">,</span> data<span class="hl opt">-&gt;</span>group_name<span class="hl opt">,</span>
+                param_name<span class="hl opt">, &amp;</span>gerr<span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span>gerr<span class="hl opt">) {</span>
+            <span class="hl kwd">bot_gtk_param_widget_set_bool</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> param_name<span class="hl opt">,</span> val<span class="hl opt">);</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span> <span class="hl opt">(</span>type<span class="hl opt">,</span> <span class="hl str">&quot;double&quot;</span><span class="hl opt">)) {</span>
+        <span class="hl kwb">double</span> val <span class="hl opt">=</span> <span class="hl kwd">g_key_file_get_double</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>keyfile<span class="hl opt">,</span> data<span class="hl opt">-&gt;</span>group_name<span class="hl opt">,</span>
+                param_name<span class="hl opt">, &amp;</span>gerr<span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span>gerr<span class="hl opt">) {</span>
+            <span class="hl kwd">bot_gtk_param_widget_set_double</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> param_name<span class="hl opt">,</span> val<span class="hl opt">);</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span> <span class="hl opt">(</span>type<span class="hl opt">,</span> <span class="hl str">&quot;int&quot;</span><span class="hl opt">)) {</span>
+        <span class="hl kwb">int</span> val <span class="hl opt">=</span> <span class="hl kwd">g_key_file_get_integer</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>keyfile<span class="hl opt">,</span> data<span class="hl opt">-&gt;</span>group_name<span class="hl opt">,</span>
+                param_name<span class="hl opt">, &amp;</span>gerr<span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span>gerr<span class="hl opt">) {</span>
+            <span class="hl kwd">bot_gtk_param_widget_set_int</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> param_name<span class="hl opt">,</span> val<span class="hl opt">);</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span> <span class="hl opt">(</span>type<span class="hl opt">,</span> <span class="hl str">&quot;enum&quot;</span><span class="hl opt">)) {</span>
+        <span class="hl kwb">int</span> val <span class="hl opt">=</span> <span class="hl kwd">g_key_file_get_integer</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>keyfile<span class="hl opt">,</span> data<span class="hl opt">-&gt;</span>group_name<span class="hl opt">,</span>
+                param_name<span class="hl opt">, &amp;</span>gerr<span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(!</span>gerr<span class="hl opt">) {</span>
+            <span class="hl kwd">bot_gtk_param_widget_set_enum</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> param_name<span class="hl opt">,</span> val<span class="hl opt">);</span>
+        <span class="hl opt">}</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl slc">// TODO</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>gerr<span class="hl opt">) {</span>
+<span class="hl slc">//        g_warning (&quot;couldn't load param %s from GKeyFile\n&quot;, param_name);</span>
+<span class="hl slc">//        g_warning (&quot;%s\n&quot;, gerr-&gt;message);</span>
+        <span class="hl kwd">g_error_free</span> <span class="hl opt">(</span>gerr<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">bot_gtk_param_widget_load_from_key_file</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> 
+        GKeyFile <span class="hl opt">*</span>keyfile<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>group_name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    _keyfile_data_t data <span class="hl opt">= {</span>
+        <span class="hl opt">.</span>keyfile <span class="hl opt">=</span> keyfile<span class="hl opt">,</span>
+        <span class="hl opt">.</span>group_name <span class="hl opt">=</span> group_name<span class="hl opt">,</span>
+        <span class="hl opt">.</span>pw <span class="hl opt">=</span> pw
+    <span class="hl opt">};</span>
+    <span class="hl kwd">g_hash_table_foreach</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> _param_load_from_keyfile<span class="hl opt">, &amp;</span>data<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">_param_save_to_keyfile</span> <span class="hl opt">(</span><span class="hl kwb">void</span> <span class="hl opt">*</span>key<span class="hl opt">,</span> <span class="hl kwb">void</span> <span class="hl opt">*</span>value<span class="hl opt">,</span> <span class="hl kwb">void</span> <span class="hl opt">*</span>user_data<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">GTK_WIDGET</span> <span class="hl opt">(</span>value<span class="hl opt">);</span>
+    _keyfile_data_t <span class="hl opt">*</span>data <span class="hl opt">=</span> user_data<span class="hl opt">;</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span>param_name <span class="hl opt">=</span> key<span class="hl opt">;</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span>type <span class="hl opt">=</span> <span class="hl kwd">g_object_get_data</span> <span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>w<span class="hl opt">),</span> <span class="hl str">&quot;data-type&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span> <span class="hl opt">(</span>type<span class="hl opt">,</span> <span class="hl str">&quot;boolean&quot;</span><span class="hl opt">)) {</span>
+        <span class="hl kwb">int</span> val <span class="hl opt">=</span> <span class="hl kwd">bot_gtk_param_widget_get_bool</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> param_name<span class="hl opt">);</span>
+        <span class="hl kwd">g_key_file_set_boolean</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>keyfile<span class="hl opt">,</span> data<span class="hl opt">-&gt;</span>group_name<span class="hl opt">,</span>
+                param_name<span class="hl opt">,</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span> <span class="hl opt">(</span>type<span class="hl opt">,</span> <span class="hl str">&quot;double&quot;</span><span class="hl opt">)) {</span>
+        <span class="hl kwb">double</span> val <span class="hl opt">=</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> param_name<span class="hl opt">);</span>
+        <span class="hl kwd">g_key_file_set_double</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>keyfile<span class="hl opt">,</span> data<span class="hl opt">-&gt;</span>group_name<span class="hl opt">,</span>
+                param_name<span class="hl opt">,</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span> <span class="hl opt">(</span>type<span class="hl opt">,</span> <span class="hl str">&quot;int&quot;</span><span class="hl opt">)) {</span>
+        <span class="hl kwb">int</span> val <span class="hl opt">=</span> <span class="hl kwd">bot_gtk_param_widget_get_int</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> param_name<span class="hl opt">);</span>
+        <span class="hl kwd">g_key_file_set_integer</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>keyfile<span class="hl opt">,</span> data<span class="hl opt">-&gt;</span>group_name<span class="hl opt">,</span>
+                param_name<span class="hl opt">,</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span> <span class="hl opt">(</span>type<span class="hl opt">,</span> <span class="hl str">&quot;enum&quot;</span><span class="hl opt">)) {</span>
+        <span class="hl kwb">int</span> val <span class="hl opt">=</span> <span class="hl kwd">bot_gtk_param_widget_get_enum</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> param_name<span class="hl opt">);</span>
+        <span class="hl kwd">g_key_file_set_integer</span> <span class="hl opt">(</span>data<span class="hl opt">-&gt;</span>keyfile<span class="hl opt">,</span> data<span class="hl opt">-&gt;</span>group_name<span class="hl opt">,</span>
+                param_name<span class="hl opt">,</span> val<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl slc">// TODO</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">bot_gtk_param_widget_save_to_key_file</span> <span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        GKeyFile <span class="hl opt">*</span>keyfile<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>group_name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    _keyfile_data_t data <span class="hl opt">= {</span>
+        <span class="hl opt">.</span>keyfile <span class="hl opt">=</span> keyfile<span class="hl opt">,</span>
+        <span class="hl opt">.</span>group_name <span class="hl opt">=</span> group_name<span class="hl opt">,</span>
+        <span class="hl opt">.</span>pw <span class="hl opt">=</span> pw
+    <span class="hl opt">};</span>
+    <span class="hl kwd">g_hash_table_foreach</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> _param_save_to_keyfile<span class="hl opt">, &amp;</span>data<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span> 
+<span class="hl kwd">bot_gtk_param_widget_modify_int</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> <span class="hl kwb">int</span> min<span class="hl opt">,</span> <span class="hl kwb">int</span> max<span class="hl opt">,</span> <span class="hl kwb">int</span> increment<span class="hl opt">,</span> <span class="hl kwb">int</span> value<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_HSCALE <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwd">gtk_range_set_range</span><span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>w<span class="hl opt">),</span> min<span class="hl opt">,</span> max<span class="hl opt">);</span>
+        <span class="hl kwd">gtk_range_set_increments</span><span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>w<span class="hl opt">),</span> increment<span class="hl opt">,</span> increment <span class="hl opt">*</span> <span class="hl num">10</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_range_set_value</span><span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>w<span class="hl opt">),</span> value<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>GTK_TYPE_SPIN_BUTTON <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        GtkSpinButton <span class="hl opt">*</span>sb <span class="hl opt">=</span> <span class="hl kwd">GTK_SPIN_BUTTON</span><span class="hl opt">(</span>w<span class="hl opt">);</span>
+        <span class="hl kwd">gtk_spin_button_set_range</span><span class="hl opt">(</span>sb<span class="hl opt">,</span> min<span class="hl opt">,</span> max<span class="hl opt">);</span>
+        <span class="hl kwd">gtk_spin_button_set_increments</span><span class="hl opt">(</span>sb<span class="hl opt">,</span> increment<span class="hl opt">,</span> increment <span class="hl opt">*</span> <span class="hl num">10</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_spin_button_set_value</span><span class="hl opt">(</span>sb<span class="hl opt">,</span> value<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget:  can't modify parameter [%s] &quot;</span>
+                <span class="hl str">&quot;as integer.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+
+<span class="hl kwb">int</span>
+<span class="hl kwd">bot_gtk_param_widget_modify_double</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> <span class="hl kwb">double</span> min<span class="hl opt">,</span> <span class="hl kwb">double</span> max<span class="hl opt">,</span> <span class="hl kwb">double</span> increment<span class="hl opt">,</span> <span class="hl kwb">double</span> value<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_HSCALE <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        <span class="hl kwd">gtk_range_set_range</span><span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>w<span class="hl opt">),</span> min<span class="hl opt">,</span> max<span class="hl opt">);</span>
+        <span class="hl kwd">gtk_range_set_increments</span><span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>w<span class="hl opt">),</span> increment<span class="hl opt">,</span> increment <span class="hl opt">*</span> <span class="hl num">10</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_range_set_value</span><span class="hl opt">(</span><span class="hl kwd">GTK_RANGE</span><span class="hl opt">(</span>w<span class="hl opt">),</span> value<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else if</span> <span class="hl opt">(</span>GTK_TYPE_SPIN_BUTTON <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        GtkSpinButton <span class="hl opt">*</span>sb <span class="hl opt">=</span> <span class="hl kwd">GTK_SPIN_BUTTON</span><span class="hl opt">(</span>w<span class="hl opt">);</span>
+        <span class="hl kwd">gtk_spin_button_set_range</span><span class="hl opt">(</span>sb<span class="hl opt">,</span> min<span class="hl opt">,</span> max<span class="hl opt">);</span>
+        <span class="hl kwd">gtk_spin_button_set_increments</span><span class="hl opt">(</span>sb<span class="hl opt">,</span> increment<span class="hl opt">,</span> increment <span class="hl opt">*</span> <span class="hl num">10</span><span class="hl opt">);</span>
+        <span class="hl kwd">gtk_spin_button_set_value</span><span class="hl opt">(</span>sb<span class="hl opt">,</span> value<span class="hl opt">);</span>
+    <span class="hl opt">}</span> <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget:  can't modify parameter [%s] &quot;</span>
+                <span class="hl str">&quot;as double.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+
+
+<span class="hl kwb">int</span> <span class="hl kwd">bot_gtk_param_widget_modify_enum</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span>
+        <span class="hl kwb">const char</span> <span class="hl opt">*</span>label<span class="hl opt">,</span> <span class="hl kwb">const int</span> value<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_COMBO_BOX <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+        GtkTreeIter iter<span class="hl opt">;</span>
+        <span class="hl kwd">gtk_combo_box_get_active_iter</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">), &amp;</span>iter<span class="hl opt">);</span>
+    	GtkListStore <span class="hl opt">*</span> store <span class="hl opt">=</span> <span class="hl kwd">gtk_list_store_new</span> <span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">,</span> G_TYPE_STRING<span class="hl opt">,</span> G_TYPE_INT<span class="hl opt">);</span>
+        store <span class="hl opt">= (</span>GtkListStore <span class="hl opt">*)</span> <span class="hl kwd">gtk_combo_box_get_model</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">));</span>
+	<span class="hl kwd">gtk_list_store_append</span><span class="hl opt">(</span>store<span class="hl opt">, &amp;</span>iter<span class="hl opt">);</span>
+	<span class="hl kwd">gtk_list_store_set</span><span class="hl opt">(</span>store<span class="hl opt">, &amp;</span>iter<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> label<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">,</span> value<span class="hl opt">, -</span><span class="hl num">1</span><span class="hl opt">);</span>
+	<span class="hl kwd">gtk_combo_box_set_model</span><span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">),</span> <span class="hl kwd">GTK_TREE_MODEL</span><span class="hl opt">(</span>store<span class="hl opt">));</span>
+    	<span class="hl kwd">gtk_combo_box_set_active_iter</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">), &amp;</span>iter<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">bot_gtk_param_widget_clear_enum</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(!</span> <span class="hl kwd">have_parameter_key</span> <span class="hl opt">(</span>pw<span class="hl opt">,</span> name<span class="hl opt">)) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;param_widget: invalid parameter [%s]</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> name<span class="hl opt">);</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    GtkWidget <span class="hl opt">*</span>w <span class="hl opt">=</span> <span class="hl kwd">g_hash_table_lookup</span> <span class="hl opt">(</span>pw<span class="hl opt">-&gt;</span>params<span class="hl opt">,</span> name<span class="hl opt">);</span>
+
+    GType type <span class="hl opt">=</span> <span class="hl kwd">G_OBJECT_TYPE</span> <span class="hl opt">(</span>w<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>GTK_TYPE_COMBO_BOX <span class="hl opt">==</span> type<span class="hl opt">) {</span>
+    	GtkListStore <span class="hl opt">*</span> store <span class="hl opt">=</span> <span class="hl kwd">gtk_list_store_new</span> <span class="hl opt">(</span><span class="hl num">2</span><span class="hl opt">,</span> G_TYPE_STRING<span class="hl opt">,</span> G_TYPE_INT<span class="hl opt">);</span>
+	<span class="hl kwd">gtk_combo_box_set_model</span><span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">),</span> <span class="hl kwd">GTK_TREE_MODEL</span><span class="hl opt">(</span>store<span class="hl opt">));</span>
+        GtkTreeIter iter<span class="hl opt">;</span>
+	<span class="hl kwd">gtk_list_store_append</span><span class="hl opt">(</span>store<span class="hl opt">, &amp;</span>iter<span class="hl opt">);</span>
+	<span class="hl kwd">gtk_list_store_set</span><span class="hl opt">(</span>store<span class="hl opt">, &amp;</span>iter<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl str">&quot;None&quot;</span><span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">, -</span><span class="hl num">1</span><span class="hl opt">);</span>
+    	<span class="hl kwd">gtk_combo_box_set_active_iter</span> <span class="hl opt">(</span><span class="hl kwd">GTK_COMBO_BOX</span><span class="hl opt">(</span>w<span class="hl opt">), &amp;</span>iter<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->
