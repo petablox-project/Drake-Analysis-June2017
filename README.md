@@ -28,16 +28,18 @@ All of the above tools except Coverity are freely available.  Coverity provides 
   <tr> 
     <td> <a href="analysis_results/FB_Infer.md#alarm-1-drakeexternalsipoptipoptsrclinalgipexpansionmatrixcpp371">ND in externals/ipopt</a> </td> 
     <td> A pointer is allocated memory depending on a condition. But the condition may not hold when the pointer is accessed. </td> 
-
-  <tr>
-  <td></td>
-  <td></td>
   </tr>
   
-  <tr>
-  <td></td>
-  <td></td>
+  <tr> 
+    <td> <a href="analysis_results/FB_Infer.md#alarm-1-drakeexternalsipoptipoptsrclinalgipexpansionmatrixcpp371">BU in externals/ipopt</a> </td> 
+    <td> An integer element is retrieved from a priority queue and used as index of a buffer. If the queue is empty, the index could be -1.</td> 
   </tr>
+  
+  <tr> 
+    <td> <a href="analysis_results/FB_Infer.md#alarm-1-drakeexternalsipoptipoptsrclinalgipexpansionmatrixcpp371">ND in externals/libbot</a> </td> 
+    <td> A pointer element is retrieved from a hash table with a key and accessed. If the key does not exist in the hash table, it could be null.</td> 
+  </tr>
+  
 </table>
 </li>
 
