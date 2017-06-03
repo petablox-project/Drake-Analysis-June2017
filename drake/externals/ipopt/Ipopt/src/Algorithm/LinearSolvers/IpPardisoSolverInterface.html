@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/ipopt/Ipopt/src/Algorithm/LinearSolvers/IpPardisoSolverInterface.cpp</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl slc">// Copyright (C) 2005, 2010 International Business Machines and others.</span>
+<span class="hl slc">// All Rights Reserved.</span>
+<span class="hl slc">// This code is published under the Eclipse Public License.</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// $Id: IpPardisoSolverInterface.cpp 2594 2015-08-09 14:31:05Z stefan $</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// Authors:  Carl Laird, Andreas Waechter     IBM    2005-03-17</span>
+<span class="hl slc">//</span>
+<span class="hl slc">//           Olaf Schenk                      Univ of Basel 2005-09-20</span>
+<span class="hl slc">//                  - changed options, added PHASE_ flag</span>
+
+<span class="hl com">/* some useful links:</span>
+<span class="hl com"> * MKL documentation: https://software.intel.com/en-us/intel-mkl/documentation</span>
+<span class="hl com"> * API differences MKL vs Basel PARDISO: http://software.intel.com/en-us/articles/summary-of-api-differences-between-intel-mkl-pardiso-and-university-of-basel-pardiso-400</span>
+<span class="hl com"> */</span>
+
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;IpoptConfig.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;IpPardisoSolverInterface.hpp&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc"># include &lt;math.h&gt;</span>
+
+<span class="hl ppc">#ifdef HAVE_CSTDIO</span>
+<span class="hl ppc"># include &lt;cstdio&gt;</span>
+<span class="hl ppc">#else</span>
+<span class="hl ppc"># ifdef HAVE_STDIO_H</span>
+<span class="hl ppc">#  include &lt;stdio.h&gt;</span>
+<span class="hl ppc"># else</span>
+<span class="hl ppc">#  error</span> <span class="hl pps">&quot;don't have header file for stdio&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc"># endif</span>
+<span class="hl ppc">#endif</span>
+
+<span class="hl ppc">#ifdef HAVE_CSTDLIB</span>
+<span class="hl ppc"># include &lt;cstdlib&gt;</span>
+<span class="hl ppc">#else</span>
+<span class="hl ppc"># ifdef HAVE_STDLIB_H</span>
+<span class="hl ppc">#  include &lt;stdlib.h&gt;</span>
+<span class="hl ppc"># else</span>
+<span class="hl ppc">#  error</span> <span class="hl pps">&quot;don't have header file for stdlib&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc"># endif</span>
+<span class="hl ppc">#endif</span>
+
+<span class="hl ppc">#ifdef HAVE_CSTRING</span>
+<span class="hl ppc"># include &lt;cstring&gt;</span>
+<span class="hl ppc">#else</span>
+<span class="hl ppc"># ifdef HAVE_STRING_H</span>
+<span class="hl ppc">#  include &lt;string.h&gt;</span>
+<span class="hl ppc"># else</span>
+<span class="hl ppc">#  error</span> <span class="hl pps">&quot;don't have header file for string&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc"># endif</span>
+<span class="hl ppc">#endif</span>
+
+<span class="hl slc">// determine the correct name of the Pardiso function</span>
+<span class="hl ppc">#if defined(_MSC_VER) &amp;&amp; defined(HAVE_PARDISO)</span>
+<span class="hl ppc"># define PARDISOINIT_FUNC PARDISOINIT</span>
+<span class="hl ppc"># define PARDISO_FUNC PARDISO</span>
+<span class="hl ppc">#else</span>
+<span class="hl ppc"># define PARDISOINIT_FUNC F77_FUNC(pardisoinit,PARDISOINIT)</span>
+<span class="hl ppc"># define PARDISO_FUNC F77_FUNC(pardiso,PARDISO)</span>
+<span class="hl ppc">#endif</span>
+
+
+<span class="hl com">/* Prototypes for Pardiso's subroutines */</span>
+<span class="hl kwc">extern</span> <span class="hl str">&quot;C&quot;</span>
+<span class="hl opt">{</span>
+<span class="hl ppc">#if defined(HAVE_PARDISO_OLDINTERFACE) || defined(HAVE_PARDISO_MKL)</span>
+  <span class="hl kwb">void</span> <span class="hl kwd">PARDISOINIT_FUNC</span><span class="hl opt">(</span><span class="hl kwb">void</span><span class="hl opt">*</span> PT<span class="hl opt">,</span> <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> MTYPE<span class="hl opt">,</span> ipfint<span class="hl opt">*</span> IPARM<span class="hl opt">);</span>
+<span class="hl ppc">#else</span>
+  <span class="hl slc">// The following is a fix to allow linking with Pardiso library under Windows</span>
+  <span class="hl kwb">void</span> <span class="hl kwd">PARDISOINIT_FUNC</span><span class="hl opt">(</span><span class="hl kwb">void</span><span class="hl opt">*</span> PT<span class="hl opt">,</span> <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> MTYPE<span class="hl opt">,</span>
+                        <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> SOLVER<span class="hl opt">,</span>
+                        ipfint<span class="hl opt">*</span> IPARM<span class="hl opt">,</span>
+                        <span class="hl kwb">double</span><span class="hl opt">*</span> DPARM<span class="hl opt">,</span>
+                        ipfint<span class="hl opt">*</span> ERROR<span class="hl opt">);</span>
+<span class="hl ppc">#endif</span>
+  <span class="hl kwb">void</span> <span class="hl kwd">PARDISO_FUNC</span><span class="hl opt">(</span><span class="hl kwb">void</span><span class="hl opt">**</span> PT<span class="hl opt">,</span> <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> MAXFCT<span class="hl opt">,</span>
+                    <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> MNUM<span class="hl opt">,</span> <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> MTYPE<span class="hl opt">,</span>
+                    <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> PHASE<span class="hl opt">,</span> <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> N<span class="hl opt">,</span>
+                    <span class="hl kwb">const double</span><span class="hl opt">*</span> A<span class="hl opt">,</span> <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> IA<span class="hl opt">,</span>
+                    <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> JA<span class="hl opt">,</span> <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> PERM<span class="hl opt">,</span>
+                    <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> NRHS<span class="hl opt">,</span> ipfint<span class="hl opt">*</span> IPARM<span class="hl opt">,</span>
+                    <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> MSGLVL<span class="hl opt">,</span> <span class="hl kwb">double</span><span class="hl opt">*</span> B<span class="hl opt">,</span> <span class="hl kwb">double</span><span class="hl opt">*</span> X<span class="hl opt">,</span>
+                    ipfint<span class="hl opt">*</span> ERROR<span class="hl opt">,</span> <span class="hl kwb">double</span><span class="hl opt">*</span> DPARM<span class="hl opt">);</span>
+
+
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+  <span class="hl kwb">void</span> <span class="hl kwd">smat_reordering_pardiso_wsmp_</span><span class="hl opt">(</span><span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> N<span class="hl opt">,</span> <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> ia<span class="hl opt">,</span> <span class="hl kwb">const</span> ipfint<span class="hl opt">*</span> ja<span class="hl opt">,</span> <span class="hl kwb">const double</span><span class="hl opt">*</span> a_<span class="hl opt">,</span> ipfint<span class="hl opt">*</span> a2<span class="hl opt">,</span> ipfint<span class="hl opt">*</span> ja2<span class="hl opt">,</span>  <span class="hl kwb">double</span><span class="hl opt">*</span> a2_<span class="hl opt">,</span>
+                                     ipfint<span class="hl opt">*</span> perm2<span class="hl opt">,</span>  <span class="hl kwb">double</span><span class="hl opt">*</span> scale2<span class="hl opt">,</span> ipfint<span class="hl opt">*</span> tmp2_<span class="hl opt">,</span> ipfint preprocess <span class="hl opt">);</span>
+<span class="hl ppc">#endif</span>
+
+<span class="hl opt">}</span>
+
+<span class="hl kwa">namespace</span> Ipopt
+<span class="hl opt">{</span>
+<span class="hl ppc">#if COIN_IPOPT_VERBOSITY &gt; 0</span>
+  <span class="hl kwb">static const</span> Index dbg_verbosity <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl ppc">#endif</span>
+
+  PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">PardisoSolverInterface</span><span class="hl opt">()</span>
+      <span class="hl opt">:</span>
+      <span class="hl kwd">a_</span><span class="hl opt">(</span>NULL<span class="hl opt">),</span>
+
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+      <span class="hl kwd">ia2</span><span class="hl opt">(</span>NULL<span class="hl opt">),</span>
+      <span class="hl kwd">ja2</span><span class="hl opt">(</span>NULL<span class="hl opt">),</span>
+      <span class="hl kwd">a2_</span><span class="hl opt">(</span>NULL<span class="hl opt">),</span>
+      <span class="hl kwd">perm2</span><span class="hl opt">(</span>NULL<span class="hl opt">),</span>
+      <span class="hl kwd">scale2</span><span class="hl opt">(</span>NULL<span class="hl opt">),</span>
+<span class="hl ppc">#endif</span>
+
+      <span class="hl kwd">negevals_</span><span class="hl opt">(-</span><span class="hl num">1</span><span class="hl opt">),</span>
+      <span class="hl kwd">initialized_</span><span class="hl opt">(</span><span class="hl kwa">false</span><span class="hl opt">),</span>
+
+      <span class="hl kwd">MAXFCT_</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">),</span>
+      <span class="hl kwd">MNUM_</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">),</span>
+      <span class="hl kwd">MTYPE_</span><span class="hl opt">(-</span><span class="hl num">2</span><span class="hl opt">),</span>
+      <span class="hl kwd">MSGLVL_</span><span class="hl opt">(</span><span class="hl num">0</span><span class="hl opt">),</span>
+      <span class="hl kwd">debug_last_iter_</span><span class="hl opt">(-</span><span class="hl num">1</span><span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_START_METH</span><span class="hl opt">(</span><span class="hl str">&quot;PardisoSolverInterface::PardisoSolverInterface()&quot;</span><span class="hl opt">,</span>dbg_verbosity<span class="hl opt">);</span>
+
+    PT_ <span class="hl opt">=</span> <span class="hl kwa">new</span> <span class="hl kwb">void</span><span class="hl opt">*[</span><span class="hl num">64</span><span class="hl opt">];</span>
+    IPARM_ <span class="hl opt">=</span> <span class="hl kwa">new</span> ipfint<span class="hl opt">[</span><span class="hl num">64</span><span class="hl opt">];</span>
+    DPARM_ <span class="hl opt">=</span> <span class="hl kwa">new</span> <span class="hl kwb">double</span><span class="hl opt">[</span><span class="hl num">64</span><span class="hl opt">];</span>
+  <span class="hl opt">}</span>
+
+  PardisoSolverInterface<span class="hl opt">::~</span><span class="hl kwd">PardisoSolverInterface</span><span class="hl opt">()</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_START_METH</span><span class="hl opt">(</span><span class="hl str">&quot;PardisoSolverInterface::~PardisoSolverInterface()&quot;</span><span class="hl opt">,</span>
+                   dbg_verbosity<span class="hl opt">);</span>
+
+    <span class="hl slc">// Tell Pardiso to release all memory</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>initialized_<span class="hl opt">) {</span>
+      ipfint PHASE <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+      ipfint N <span class="hl opt">=</span> dim_<span class="hl opt">;</span>
+      ipfint NRHS <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      ipfint ERROR<span class="hl opt">;</span>
+      ipfint idmy<span class="hl opt">;</span>
+      <span class="hl kwb">double</span> ddmy<span class="hl opt">;</span>
+      <span class="hl kwd">PARDISO_FUNC</span><span class="hl opt">(</span>PT_<span class="hl opt">, &amp;</span>MAXFCT_<span class="hl opt">, &amp;</span>MNUM_<span class="hl opt">, &amp;</span>MTYPE_<span class="hl opt">, &amp;</span>PHASE<span class="hl opt">, &amp;</span>N<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>ddmy<span class="hl opt">, &amp;</span>idmy<span class="hl opt">, &amp;</span>idmy<span class="hl opt">, &amp;</span>idmy<span class="hl opt">, &amp;</span>NRHS<span class="hl opt">,</span> IPARM_<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>MSGLVL_<span class="hl opt">, &amp;</span>ddmy<span class="hl opt">, &amp;</span>ddmy<span class="hl opt">, &amp;</span>ERROR<span class="hl opt">,</span> DPARM_<span class="hl opt">);</span>
+      <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span>ERROR<span class="hl opt">==</span><span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> PT_<span class="hl opt">;</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> IPARM_<span class="hl opt">;</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> DPARM_<span class="hl opt">;</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> a_<span class="hl opt">;</span>
+
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> ia2<span class="hl opt">;</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> ja2<span class="hl opt">;</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> a2_<span class="hl opt">;</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> perm2<span class="hl opt">;</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> scale2<span class="hl opt">;</span>
+<span class="hl ppc">#endif</span>
+
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">void</span> PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">RegisterOptions</span><span class="hl opt">(</span>SmartPtr<span class="hl opt">&lt;</span>RegisteredOptions<span class="hl opt">&gt;</span> roptions<span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    <span class="hl slc">// Todo Use keywords instead of integer numbers</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddStringOption3</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_matching_strategy&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Matching strategy to be used by Pardiso&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;complete+2x2&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;complete&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;Match complete (IPAR(13)=1)&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;complete+2x2&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;Match complete+2x2 (IPAR(13)=2)&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;constraints&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;Match constraints (IPAR(13)=3)&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;This is IPAR(13) in Pardiso manual.&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddStringOption2</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_redo_symbolic_fact_only_if_inertia_wrong&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Toggle for handling case when elements were perturbed by Pardiso.&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;no&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;no&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;Always redo symbolic factorization when elements were perturbed&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;yes&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;Only redo symbolic factorization when elements were perturbed if also the inertia was wrong&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddStringOption2</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_repeated_perturbation_means_singular&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Interpretation of perturbed elements.&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;no&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;no&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;Don't assume that matrix is singular if elements were perturbed after recent symbolic factorization&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;yes&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;Assume that matrix is singular if elements were perturbed after recent symbolic factorization&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;&quot;</span><span class="hl opt">);</span>
+    <span class="hl slc">//roptions-&gt;AddLowerBoundedIntegerOption(</span>
+    <span class="hl slc">//  &quot;pardiso_out_of_core_power&quot;,</span>
+    <span class="hl slc">//  &quot;Enables out-of-core variant of Pardiso&quot;,</span>
+    <span class="hl slc">//  0, 0,</span>
+    <span class="hl slc">//  &quot;Setting this option to a positive integer k makes Pardiso work in the &quot;</span>
+    <span class="hl slc">//  &quot;out-of-core variant where the factor is split in 2^k subdomains.  This &quot;</span>
+    <span class="hl slc">//  &quot;is IPARM(50) in the Pardiso manual.  This option is only available if &quot;</span>
+    <span class="hl slc">//  &quot;Ipopt has been compiled with Pardiso.&quot;);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddLowerBoundedIntegerOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_msglvl&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Pardiso message level&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;This determines the amount of analysis output from the Pardiso solver. &quot;</span>
+      <span class="hl str">&quot;This is MSGLVL in the Pardiso manual.&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddStringOption2</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_skip_inertia_check&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Always pretend inertia is correct.&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;no&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;no&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;check inertia&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;yes&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;skip inertia check&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Setting this option to</span> <span class="hl esc">\&quot;</span><span class="hl str">yes</span><span class="hl esc">\&quot;</span> <span class="hl str">essentially disables inertia check. &quot;</span>
+      <span class="hl str">&quot;This option makes the algorithm non-robust and easily fail, but it &quot;</span>
+      <span class="hl str">&quot;might give some insight into the necessity of inertia control.&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddIntegerOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_max_iterative_refinement_steps&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Limit on number of iterative refinement steps.&quot;</span><span class="hl opt">,</span>
+      <span class="hl slc">// ToDo: Decide how many iterative refinement steps in Pardiso.</span>
+      <span class="hl slc">//       For now, we keep the default (0) for Basel Pardiso.</span>
+      <span class="hl slc">//       For MKL Pardiso, it seems that setting it to 1 makes it more</span>
+      <span class="hl slc">//       robust and just a little bit slower.</span>
+      <span class="hl slc">//       Setting it to 1 should decrease the number of iterative refinement</span>
+      <span class="hl slc">//       steps by 1 in case that perturbed pivots have been used, and increase</span>
+      <span class="hl slc">//       it by 1 otherwise.</span>
+<span class="hl ppc">#ifdef HAVE_PARDISO_MKL</span>
+      <span class="hl num">1</span><span class="hl opt">,</span>
+<span class="hl ppc">#else</span>
+      <span class="hl num">0</span><span class="hl opt">,</span>
+<span class="hl ppc">#endif</span>
+      <span class="hl str">&quot;The solver does not perform more than the absolute value of this value steps of iterative refinement and stops the process if a satisfactory level of accuracy of the solution in terms of backward error is achieved. &quot;</span>
+      <span class="hl str">&quot;If negative, the accumulation of the residue uses extended precision real and complex data types. Perturbed pivots result in iterative refinement. &quot;</span>
+      <span class="hl str">&quot;The solver automatically performs two steps of iterative refinements when perturbed pivots are obtained during the numerical factorization and this option is set to 0.&quot;</span><span class="hl opt">);</span>
+<span class="hl ppc">#ifdef HAVE_PARDISO_MKL</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddStringOption4</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_order&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Controls the fill-in reduction ordering algorithm for the input matrix.&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;metis&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;amd&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;minimum degree algorithm&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;one&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;undocumented&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;metis&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;MeTiS nested dissection algorithm&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;pmetis&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;parallel (OpenMP) version of MeTiS nested dissection algorithm&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;&quot;</span><span class="hl opt">);</span>
+<span class="hl ppc">#else</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddStringOption6</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_order&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Controls the fill-in reduction ordering algorithm for the input matrix.&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;five&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;amd&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;minimum degree algorithm&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;one&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;undocumented&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;metis&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;MeTiS nested dissection algorithm&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;pmetis&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;parallel (OpenMP) version of MeTiS nested dissection algorithm&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;four&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;undocumented&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;five&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;undocumented&quot;</span>
+      <span class="hl str">&quot;&quot;</span><span class="hl opt">);</span>
+<span class="hl ppc">#endif</span>
+<span class="hl ppc">#if !defined(HAVE_PARDISO_OLDINTERFACE) &amp;&amp; !defined(HAVE_PARDISO_MKL)</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddLowerBoundedIntegerOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_max_iter&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Maximum number of Krylov-Subspace Iteration&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">500</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;DPARM(1)&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddBoundedNumberOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_iter_relative_tol&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Relative Residual Convergence&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">0.0</span><span class="hl opt">,</span> <span class="hl kwa">true</span><span class="hl opt">,</span> <span class="hl num">1.0</span><span class="hl opt">,</span> <span class="hl kwa">true</span><span class="hl opt">,</span> <span class="hl num">1e-6</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;DPARM(2)&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddLowerBoundedIntegerOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_iter_coarse_size&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Maximum Size of Coarse Grid Matrix&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">5000</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;DPARM(3)&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddLowerBoundedIntegerOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_iter_max_levels&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Maximum Size of Grid Levels&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">10</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;DPARM(4)&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddBoundedNumberOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_iter_dropping_factor&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;dropping value for incomplete factor&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">0.0</span><span class="hl opt">,</span> <span class="hl kwa">true</span><span class="hl opt">,</span> <span class="hl num">1.0</span><span class="hl opt">,</span> <span class="hl kwa">true</span><span class="hl opt">,</span> <span class="hl num">0.5</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;DPARM(5)&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddBoundedNumberOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_iter_dropping_schur&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;dropping value for sparsify schur complement factor&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">0.0</span><span class="hl opt">,</span> <span class="hl kwa">true</span><span class="hl opt">,</span> <span class="hl num">1.0</span><span class="hl opt">,</span> <span class="hl kwa">true</span><span class="hl opt">,</span> <span class="hl num">1e-1</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;DPARM(6)&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddLowerBoundedIntegerOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_iter_max_row_fill&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;max fill for each row&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">1</span><span class="hl opt">,</span><span class="hl num">10000000</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;DPARM(7)&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddLowerBoundedNumberOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_iter_inverse_norm_factor&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">true</span><span class="hl opt">,</span> <span class="hl num">5000000</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;DPARM(8)&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddStringOption2</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_iterative&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Switch on iterative solver in Pardiso library&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;no&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;no&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;yes&quot;</span><span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;This option is not available for Pardiso &lt; 4.0 or MKL Pardiso&quot;</span><span class="hl opt">);</span>
+    roptions<span class="hl opt">-&gt;</span><span class="hl kwd">AddLowerBoundedIntegerOption</span><span class="hl opt">(</span>
+      <span class="hl str">&quot;pardiso_max_droptol_corrections&quot;</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;Maximal number of decreases of drop tolerance during one solve.&quot;</span><span class="hl opt">,</span>
+      <span class="hl num">1</span><span class="hl opt">,</span> <span class="hl num">4</span><span class="hl opt">,</span>
+      <span class="hl str">&quot;This is relevant only for iterative Pardiso options.&quot;</span><span class="hl opt">);</span>
+<span class="hl ppc">#endif</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">bool</span> PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">InitializeImpl</span><span class="hl opt">(</span><span class="hl kwb">const</span> OptionsList<span class="hl opt">&amp;</span> options<span class="hl opt">,</span>
+      <span class="hl kwb">const</span> std<span class="hl opt">::</span>string<span class="hl opt">&amp;</span> prefix<span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    Index enum_int<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetEnumValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_matching_strategy&quot;</span><span class="hl opt">,</span> enum_int<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    match_strat_ <span class="hl opt">=</span> <span class="hl kwd">PardisoMatchingStrategy</span><span class="hl opt">(</span>enum_int<span class="hl opt">);</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetBoolValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_redo_symbolic_fact_only_if_inertia_wrong&quot;</span><span class="hl opt">,</span>
+                         pardiso_redo_symbolic_fact_only_if_inertia_wrong_<span class="hl opt">,</span>
+                         prefix<span class="hl opt">);</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetBoolValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_repeated_perturbation_means_singular&quot;</span><span class="hl opt">,</span>
+                         pardiso_repeated_perturbation_means_singular_<span class="hl opt">,</span>
+                         prefix<span class="hl opt">);</span>
+    <span class="hl slc">//Index pardiso_out_of_core_power;</span>
+    <span class="hl slc">//options.GetIntegerValue(&quot;pardiso_out_of_core_power&quot;,</span>
+    <span class="hl slc">//                        pardiso_out_of_core_power, prefix);</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetBoolValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_skip_inertia_check&quot;</span><span class="hl opt">,</span>
+                         skip_inertia_check_<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    <span class="hl kwb">int</span> pardiso_msglvl<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetIntegerValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_msglvl&quot;</span><span class="hl opt">,</span> pardiso_msglvl<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    <span class="hl kwb">int</span> max_iterref_steps<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetIntegerValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_max_iterative_refinement_steps&quot;</span><span class="hl opt">,</span> max_iterref_steps<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    <span class="hl kwb">int</span> order<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetEnumValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_order&quot;</span><span class="hl opt">,</span> order<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+<span class="hl ppc">#if !defined(HAVE_PARDISO_OLDINTERFACE) &amp;&amp; !defined(HAVE_PARDISO_MKL)</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetBoolValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_iterative&quot;</span><span class="hl opt">,</span> pardiso_iterative_<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    <span class="hl kwb">int</span> pardiso_max_iter<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetIntegerValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_max_iter&quot;</span><span class="hl opt">,</span> pardiso_max_iter<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    Number pardiso_iter_relative_tol<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetNumericValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_iter_relative_tol&quot;</span><span class="hl opt">,</span>
+                            pardiso_iter_relative_tol<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    Index pardiso_iter_coarse_size<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetIntegerValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_iter_coarse_size&quot;</span><span class="hl opt">,</span>
+                            pardiso_iter_coarse_size<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    Index pardiso_iter_max_levels<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetIntegerValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_iter_max_levels&quot;</span><span class="hl opt">,</span>
+                            pardiso_iter_max_levels<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    Number pardiso_iter_dropping_factor<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetNumericValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_iter_dropping_factor&quot;</span><span class="hl opt">,</span>
+                            pardiso_iter_dropping_factor<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    Number pardiso_iter_dropping_schur<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetNumericValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_iter_dropping_schur&quot;</span><span class="hl opt">,</span>
+                            pardiso_iter_dropping_schur<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    Index pardiso_iter_max_row_fill<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetIntegerValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_iter_max_row_fill&quot;</span><span class="hl opt">,</span>
+                            pardiso_iter_max_row_fill<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    Number pardiso_iter_inverse_norm_factor<span class="hl opt">;</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetNumericValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_iter_inverse_norm_factor&quot;</span><span class="hl opt">,</span>
+                            pardiso_iter_inverse_norm_factor<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+    options<span class="hl opt">.</span><span class="hl kwd">GetIntegerValue</span><span class="hl opt">(</span><span class="hl str">&quot;pardiso_max_droptol_corrections&quot;</span><span class="hl opt">,</span>
+                            pardiso_max_droptol_corrections_<span class="hl opt">,</span> prefix<span class="hl opt">);</span>
+<span class="hl ppc">#else</span>
+    pardiso_iterative_ <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+<span class="hl ppc">#endif</span>
+
+    <span class="hl slc">// Number value = 0.0;</span>
+
+    <span class="hl slc">// Tell Pardiso to release all memory if it had been used before</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>initialized_<span class="hl opt">) {</span>
+      ipfint PHASE <span class="hl opt">= -</span><span class="hl num">1</span><span class="hl opt">;</span>
+      ipfint N <span class="hl opt">=</span> dim_<span class="hl opt">;</span>
+      ipfint NRHS <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      ipfint ERROR<span class="hl opt">;</span>
+      ipfint idmy<span class="hl opt">;</span>
+      <span class="hl kwb">double</span> ddmy<span class="hl opt">;</span>
+      <span class="hl kwd">PARDISO_FUNC</span><span class="hl opt">(</span>PT_<span class="hl opt">, &amp;</span>MAXFCT_<span class="hl opt">, &amp;</span>MNUM_<span class="hl opt">, &amp;</span>MTYPE_<span class="hl opt">, &amp;</span>PHASE<span class="hl opt">, &amp;</span>N<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>ddmy<span class="hl opt">, &amp;</span>idmy<span class="hl opt">, &amp;</span>idmy<span class="hl opt">, &amp;</span>idmy<span class="hl opt">, &amp;</span>NRHS<span class="hl opt">,</span> IPARM_<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>MSGLVL_<span class="hl opt">, &amp;</span>ddmy<span class="hl opt">, &amp;</span>ddmy<span class="hl opt">, &amp;</span>ERROR<span class="hl opt">,</span> DPARM_<span class="hl opt">);</span>
+      <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span>ERROR<span class="hl opt">==</span><span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// Reset all private data</span>
+    dim_<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span>
+    nonzeros_<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span>
+    have_symbolic_factorization_<span class="hl opt">=</span><span class="hl kwa">false</span><span class="hl opt">;</span>
+    initialized_<span class="hl opt">=</span><span class="hl kwa">false</span><span class="hl opt">;</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> a_<span class="hl opt">;</span>
+    a_ <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> ia2<span class="hl opt">;</span>
+    ia2 <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> ja2<span class="hl opt">;</span>
+    ja2 <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> a2_<span class="hl opt">;</span>
+    a2_ <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> perm2<span class="hl opt">;</span>
+    perm2 <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> scale2<span class="hl opt">;</span>
+    scale2 <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+<span class="hl ppc">#endif</span>
+
+    <span class="hl slc">// Call Pardiso's initialization routine</span>
+    <span class="hl kwd">memset</span><span class="hl opt">(</span>PT_<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">64</span><span class="hl opt">);</span> <span class="hl slc">// needs to be initialized to 0 according to MKL Pardiso docu</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>  <span class="hl slc">// Tell it to fill IPARM with default values(?)</span>
+
+<span class="hl ppc">#if ! defined(HAVE_PARDISO_OLDINTERFACE) &amp;&amp; ! defined(HAVE_PARDISO_MKL)</span>
+    ipfint ERROR <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    ipfint SOLVER <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> <span class="hl slc">// initialize only direct solver</span>
+
+    <span class="hl kwd">PARDISOINIT_FUNC</span><span class="hl opt">(</span>PT_<span class="hl opt">, &amp;</span>MTYPE_<span class="hl opt">, &amp;</span>SOLVER<span class="hl opt">,</span> IPARM_<span class="hl opt">,</span> DPARM_<span class="hl opt">, &amp;</span>ERROR<span class="hl opt">);</span>
+<span class="hl ppc">#else</span>
+    <span class="hl kwd">PARDISOINIT_FUNC</span><span class="hl opt">(</span>PT_<span class="hl opt">, &amp;</span>MTYPE_<span class="hl opt">,</span> IPARM_<span class="hl opt">);</span>
+<span class="hl ppc">#endif</span>
+
+    <span class="hl slc">// Set some parameters for Pardiso</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl num">1</span><span class="hl opt">;</span>  <span class="hl slc">// Don't use the default values</span>
+
+    <span class="hl kwb">int</span> num_procs <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+<span class="hl ppc">#if defined(HAVE_PARDISO_PARALLEL) || ! defined(HAVE_PARDISO)</span>
+    <span class="hl slc">// Obtain the numbers of processors from the value of OMP_NUM_THREADS</span>
+    <span class="hl kwb">char</span><span class="hl opt">*</span> var <span class="hl opt">=</span> <span class="hl kwd">getenv</span><span class="hl opt">(</span><span class="hl str">&quot;OMP_NUM_THREADS&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>var <span class="hl opt">!=</span> NULL<span class="hl opt">) {</span>
+      <span class="hl kwd">sscanf</span><span class="hl opt">(</span> var<span class="hl opt">,</span> <span class="hl str">&quot;%d&quot;</span><span class="hl opt">, &amp;</span>num_procs <span class="hl opt">);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>num_procs <span class="hl opt">&lt;</span> <span class="hl num">1</span><span class="hl opt">) {</span>
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_ERROR<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;Invalid value for OMP_NUM_THREADS (</span><span class="hl esc">\&quot;</span><span class="hl str">%s</span><span class="hl esc">\&quot;</span><span class="hl str">).</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> var<span class="hl opt">);</span>
+        <span class="hl kwa">return false</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                     <span class="hl str">&quot;Using environment OMP_NUM_THREADS = %d as the number of processors for PARDISO.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> num_procs<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+<span class="hl ppc">#if defined(HAVE_PARDISO) &amp;&amp; ! defined(HAVE_PARDISO_MKL)</span>
+    <span class="hl slc">// If we run Pardiso through the linear solver loader,</span>
+    <span class="hl slc">// we do not know whether it is the parallel version, so we do not report a warning if OMP_NUM_THREADS is not set.</span>
+    <span class="hl slc">// If we run Pardiso from MKL, then OMP_NUM_THREADS does not need to be set, so no warning.</span>
+    <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_WARNING<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                     <span class="hl str">&quot;You should set the environment variable OMP_NUM_THREADS to the number of processors used in Pardiso (e.g., 1).</span><span class="hl esc">\n\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+<span class="hl ppc">#endif</span>
+<span class="hl ppc">#endif</span>
+
+<span class="hl ppc">#ifdef HAVE_PARDISO_MKL</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> order<span class="hl opt">;</span>
+    <span class="hl slc">// For MKL PARDSIO, the documentation says, &quot;iparm(3) Reserved. Set to zero.&quot;, so we don't set IPARM_[2]</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">5</span><span class="hl opt">] =</span> <span class="hl num">1</span><span class="hl opt">;</span>  <span class="hl slc">// Overwrite right-hand side</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">7</span><span class="hl opt">] =</span> max_iterref_steps<span class="hl opt">;</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">9</span><span class="hl opt">] =</span> <span class="hl num">12</span><span class="hl opt">;</span> <span class="hl slc">// pivot perturbation (as higher as less perturbation)</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">10</span><span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span> <span class="hl slc">// enable scaling (recommended for interior-point indefinite matrices)</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">12</span><span class="hl opt">] = (</span><span class="hl kwb">int</span><span class="hl opt">)</span>match_strat_<span class="hl opt">;</span> <span class="hl slc">// enable matching (recommended, as above)</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">20</span><span class="hl opt">] =</span> <span class="hl num">3</span><span class="hl opt">;</span> <span class="hl slc">// bunch-kaufman pivoting</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">23</span><span class="hl opt">] =</span> <span class="hl num">1</span><span class="hl opt">;</span> <span class="hl slc">// parallel fac</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">24</span><span class="hl opt">] =</span> <span class="hl num">1</span><span class="hl opt">;</span> <span class="hl slc">// parallel solve</span>
+    <span class="hl slc">//IPARM_[26] = 1; // matrix checker</span>
+<span class="hl ppc">#else</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> order<span class="hl opt">;</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] =</span> num_procs<span class="hl opt">;</span> <span class="hl slc">// Set the number of processors</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">5</span><span class="hl opt">] =</span> <span class="hl num">1</span><span class="hl opt">;</span>  <span class="hl slc">// Overwrite right-hand side</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">7</span><span class="hl opt">] =</span> max_iterref_steps<span class="hl opt">;</span>
+
+    <span class="hl slc">// Options suggested by Olaf Schenk</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">9</span><span class="hl opt">] =</span> <span class="hl num">12</span><span class="hl opt">;</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">10</span><span class="hl opt">] =</span> <span class="hl num">2</span><span class="hl opt">;</span> <span class="hl slc">// Results in better scaling</span>
+    <span class="hl slc">// Matching information:  IPARM_[12] = 1 seems ok, but results in a</span>
+    <span class="hl slc">// large number of pivot perturbation</span>
+    <span class="hl slc">// Matching information:  IPARM_[12] = 2 robust,  but more  expensive method</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">12</span><span class="hl opt">] = (</span><span class="hl kwb">int</span><span class="hl opt">)</span>match_strat_<span class="hl opt">;</span>
+
+    IPARM_<span class="hl opt">[</span><span class="hl num">20</span><span class="hl opt">] =</span> <span class="hl num">3</span><span class="hl opt">;</span> <span class="hl slc">// Results in better accuracy</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">23</span><span class="hl opt">] =</span> <span class="hl num">1</span><span class="hl opt">;</span> <span class="hl slc">// parallel fac</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">24</span><span class="hl opt">] =</span> <span class="hl num">1</span><span class="hl opt">;</span> <span class="hl slc">// parallel solve</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">28</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span> <span class="hl slc">// 32-bit factorization</span>
+    IPARM_<span class="hl opt">[</span><span class="hl num">29</span><span class="hl opt">] =</span> <span class="hl num">1</span><span class="hl opt">;</span> <span class="hl slc">//we need this for IPOPT interface</span>
+    <span class="hl slc">//IPARM_[33] = 1; // bit-by-bit identical results in parallel run</span>
+<span class="hl ppc">#endif</span>
+
+    <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                   <span class="hl str">&quot;Pardiso matrix ordering     (IPARM(2)): %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> IPARM_<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+    <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                   <span class="hl str">&quot;Pardiso max. iterref. steps (IPARM(8)): %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> IPARM_<span class="hl opt">[</span><span class="hl num">7</span><span class="hl opt">]);</span>
+    <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                   <span class="hl str">&quot;Pardiso matching strategy  (IPARM(13)): %d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> IPARM_<span class="hl opt">[</span><span class="hl num">12</span><span class="hl opt">]);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>pardiso_iterative_<span class="hl opt">) {</span>
+<span class="hl ppc">#if defined(HAVE_PARDISO_OLDINTERFACE) || defined(HAVE_PARDISO_MKL)</span>
+      <span class="hl kwd">THROW_EXCEPTION</span><span class="hl opt">(</span>OPTION_INVALID<span class="hl opt">,</span>
+                      <span class="hl str">&quot;You chose to use the iterative version of Pardiso, but you need to use a Pardiso version of at least 4.0.&quot;</span><span class="hl opt">);</span>
+<span class="hl ppc">#else</span>
+      IPARM_<span class="hl opt">[</span><span class="hl num">31</span><span class="hl opt">] =</span> <span class="hl num">1</span> <span class="hl opt">;</span>  <span class="hl slc">// active direct solver</span>
+
+      DPARM_<span class="hl opt">[</span> <span class="hl num">0</span><span class="hl opt">] =</span> pardiso_max_iter<span class="hl opt">;</span> <span class="hl slc">// maximum number of Krylov-Subspace Iteration</span>
+      <span class="hl slc">// Default is 300</span>
+      <span class="hl slc">// 1 &lt;= value &lt;= e.g. 1000</span>
+      DPARM_<span class="hl opt">[</span> <span class="hl num">1</span><span class="hl opt">] =</span> pardiso_iter_relative_tol<span class="hl opt">;</span> <span class="hl slc">// Relative Residual Convergence</span>
+      <span class="hl slc">// e.g.  pardiso_iter_tol</span>
+      <span class="hl slc">// Default is 1e-6</span>
+      <span class="hl slc">// 1e-16 &lt;= value &lt; 1</span>
+      DPARM_<span class="hl opt">[</span> <span class="hl num">2</span><span class="hl opt">] =</span> pardiso_iter_coarse_size<span class="hl opt">;</span> <span class="hl slc">// Maximum Size of Coarse Grid Matrix</span>
+      <span class="hl slc">// e.g.  pardiso_coarse_grid</span>
+      <span class="hl slc">// Default is 5000</span>
+      <span class="hl slc">// 1 &lt;= value &lt; number of equations</span>
+      DPARM_<span class="hl opt">[</span> <span class="hl num">3</span><span class="hl opt">] =</span> pardiso_iter_max_levels<span class="hl opt">;</span> <span class="hl slc">// Maximum Number of Grid Levels</span>
+      <span class="hl slc">// e.g.  pardiso_max_grid</span>
+      <span class="hl slc">// Default is 10000</span>
+      <span class="hl slc">// 1 &lt;= value &lt; number of equations</span>
+      DPARM_<span class="hl opt">[</span> <span class="hl num">4</span><span class="hl opt">] =</span> pardiso_iter_dropping_factor<span class="hl opt">;</span>  <span class="hl slc">// dropping value for incomplete factor</span>
+      <span class="hl slc">// e.g.  pardiso_dropping_factor</span>
+      <span class="hl slc">// Default is 0.5</span>
+      <span class="hl slc">// 1e-16 &lt;= value &lt; 1</span>
+      DPARM_<span class="hl opt">[</span> <span class="hl num">5</span><span class="hl opt">] =</span> pardiso_iter_dropping_schur<span class="hl opt">;</span>  <span class="hl slc">// dropping value for sparsify schur complementfactor</span>
+      <span class="hl slc">// e.g.  pardiso_dropping_schur</span>
+      <span class="hl slc">// Default is 0.1</span>
+      <span class="hl slc">// 1e-16 &lt;= value &lt; 1</span>
+      DPARM_<span class="hl opt">[</span> <span class="hl num">6</span><span class="hl opt">] =</span> pardiso_iter_max_row_fill<span class="hl opt">;</span>  <span class="hl slc">// max fill for each row</span>
+      <span class="hl slc">// e.g.  pardiso_max_fill</span>
+      <span class="hl slc">// Default is 1000</span>
+      <span class="hl slc">// 1 &lt;= value &lt; 100000</span>
+      DPARM_<span class="hl opt">[</span> <span class="hl num">7</span><span class="hl opt">] =</span> pardiso_iter_inverse_norm_factor<span class="hl opt">;</span>  <span class="hl slc">// dropping value for sparsify schur complementfactor</span>
+      <span class="hl slc">// e.g.  pardiso_inverse_norm_factor</span>
+      <span class="hl slc">// Default is 500</span>
+      <span class="hl slc">// 2 &lt;= value &lt; 50000</span>
+      DPARM_<span class="hl opt">[</span> <span class="hl num">8</span><span class="hl opt">] =</span> <span class="hl num">25</span><span class="hl opt">;</span> <span class="hl slc">// maximum number of non-improvement steps</span>
+<span class="hl ppc">#endif</span>
+    <span class="hl opt">}</span>
+
+    MSGLVL_ <span class="hl opt">=</span> pardiso_msglvl<span class="hl opt">;</span>
+
+    <span class="hl slc">// Option for the out of core variant</span>
+    <span class="hl slc">//IPARM_[49] = pardiso_out_of_core_power;</span>
+
+    <span class="hl kwa">return true</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  ESymSolverStatus PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">MultiSolve</span><span class="hl opt">(</span><span class="hl kwb">bool</span> new_matrix<span class="hl opt">,</span>
+      <span class="hl kwb">const</span> Index<span class="hl opt">*</span> ia<span class="hl opt">,</span>
+      <span class="hl kwb">const</span> Index<span class="hl opt">*</span> ja<span class="hl opt">,</span>
+      Index nrhs<span class="hl opt">,</span>
+      <span class="hl kwb">double</span><span class="hl opt">*</span> rhs_vals<span class="hl opt">,</span>
+      <span class="hl kwb">bool</span> check_NegEVals<span class="hl opt">,</span>
+      Index numberOfNegEVals<span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_START_METH</span><span class="hl opt">(</span><span class="hl str">&quot;PardisoSolverInterface::MultiSolve&quot;</span><span class="hl opt">,</span>dbg_verbosity<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(!</span>check_NegEVals <span class="hl opt">||</span> <span class="hl kwd">ProvidesInertia</span><span class="hl opt">());</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span>initialized_<span class="hl opt">);</span>
+
+    <span class="hl slc">// check if a factorization has to be done</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>new_matrix<span class="hl opt">) {</span>
+      <span class="hl slc">// perform the factorization</span>
+      ESymSolverStatus retval<span class="hl opt">;</span>
+      retval <span class="hl opt">=</span> <span class="hl kwd">Factorization</span><span class="hl opt">(</span>ia<span class="hl opt">,</span> ja<span class="hl opt">,</span> check_NegEVals<span class="hl opt">,</span> numberOfNegEVals<span class="hl opt">);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>retval<span class="hl opt">!=</span>SYMSOLVER_SUCCESS<span class="hl opt">) {</span>
+        <span class="hl kwd">DBG_PRINT</span><span class="hl opt">((</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl str">&quot;FACTORIZATION FAILED!</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">));</span>
+        <span class="hl kwa">return</span> retval<span class="hl opt">;</span>  <span class="hl slc">// Matrix singular or error occurred</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// do the solve</span>
+    <span class="hl kwa">return</span> <span class="hl kwd">Solve</span><span class="hl opt">(</span>ia<span class="hl opt">,</span> ja<span class="hl opt">,</span> nrhs<span class="hl opt">,</span> rhs_vals<span class="hl opt">);</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">double</span><span class="hl opt">*</span> PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">GetValuesArrayPtr</span><span class="hl opt">()</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span>initialized_<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span>a_<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> a_<span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl com">/** Initialize the local copy of the positions of the nonzero</span>
+<span class="hl com">      elements */</span>
+  ESymSolverStatus PardisoSolverInterface<span class="hl opt">::</span>InitializeStructure
+  <span class="hl opt">(</span>Index dim<span class="hl opt">,</span> Index nonzeros<span class="hl opt">,</span>
+   <span class="hl kwb">const</span> Index<span class="hl opt">*</span> ia<span class="hl opt">,</span>
+   <span class="hl kwb">const</span> Index<span class="hl opt">*</span> ja<span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_START_METH</span><span class="hl opt">(</span><span class="hl str">&quot;PardisoSolverInterface::InitializeStructure&quot;</span><span class="hl opt">,</span>dbg_verbosity<span class="hl opt">);</span>
+    dim_ <span class="hl opt">=</span> dim<span class="hl opt">;</span>
+    nonzeros_ <span class="hl opt">=</span> nonzeros<span class="hl opt">;</span>
+
+    <span class="hl slc">// Make space for storing the matrix elements</span>
+    <span class="hl kwa">delete</span><span class="hl opt">[]</span> a_<span class="hl opt">;</span>
+    a_ <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    a_ <span class="hl opt">=</span> <span class="hl kwa">new</span> <span class="hl kwb">double</span><span class="hl opt">[</span>nonzeros_<span class="hl opt">];</span>
+
+    <span class="hl slc">// Do the symbolic facotrization</span>
+    ESymSolverStatus retval <span class="hl opt">=</span> <span class="hl kwd">SymbolicFactorization</span><span class="hl opt">(</span>ia<span class="hl opt">,</span> ja<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>retval <span class="hl opt">!=</span> SYMSOLVER_SUCCESS<span class="hl opt">) {</span>
+      <span class="hl kwa">return</span> retval<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    initialized_ <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+
+    <span class="hl kwa">return</span> retval<span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  ESymSolverStatus
+  PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">SymbolicFactorization</span><span class="hl opt">(</span><span class="hl kwb">const</span> Index<span class="hl opt">*</span> ia<span class="hl opt">,</span>
+      <span class="hl kwb">const</span> Index<span class="hl opt">*</span> ja<span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_START_METH</span><span class="hl opt">(</span><span class="hl str">&quot;PardisoSolverInterface::SymbolicFactorization&quot;</span><span class="hl opt">,</span>
+                   dbg_verbosity<span class="hl opt">);</span>
+
+    <span class="hl slc">// Since Pardiso requires the values of the nonzeros of the matrix</span>
+    <span class="hl slc">// for an efficient symbolic factorization, we postpone that task</span>
+    <span class="hl slc">// until the first call of Factorize.  All we do here is to reset</span>
+    <span class="hl slc">// the flag (in case this interface is called for a matrix with a</span>
+    <span class="hl slc">// new structure).</span>
+
+    have_symbolic_factorization_ <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+
+    <span class="hl kwa">return</span> SYMSOLVER_SUCCESS<span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">static void</span>
+  <span class="hl kwd">write_iajaa_matrix</span> <span class="hl opt">(</span><span class="hl kwb">int</span>     N<span class="hl opt">,</span>
+                      <span class="hl kwb">const</span> Index<span class="hl opt">*</span>  ia<span class="hl opt">,</span>
+                      <span class="hl kwb">const</span> Index<span class="hl opt">*</span>  ja<span class="hl opt">,</span>
+                      <span class="hl kwb">double</span><span class="hl opt">*</span>      a_<span class="hl opt">,</span>
+                      <span class="hl kwb">double</span><span class="hl opt">*</span>      rhs_vals<span class="hl opt">,</span>
+                      <span class="hl kwb">int</span>        iter_cnt<span class="hl opt">,</span>
+                      <span class="hl kwb">int</span>        sol_cnt<span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">getenv</span> <span class="hl opt">(</span><span class="hl str">&quot;IPOPT_WRITE_MAT&quot;</span><span class="hl opt">)) {</span>
+      <span class="hl com">/* Write header */</span>
+      <span class="hl kwb">FILE</span>    <span class="hl opt">*</span>mat_file<span class="hl opt">;</span>
+      <span class="hl kwb">char</span>     mat_name<span class="hl opt">[</span><span class="hl num">128</span><span class="hl opt">];</span>
+      <span class="hl kwb">char</span>     mat_pref<span class="hl opt">[</span><span class="hl num">32</span><span class="hl opt">];</span>
+
+      ipfint   NNZ <span class="hl opt">=</span> ia<span class="hl opt">[</span>N<span class="hl opt">]-</span><span class="hl num">1</span><span class="hl opt">;</span>
+      ipfint   i<span class="hl opt">;</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">getenv</span> <span class="hl opt">(</span><span class="hl str">&quot;IPOPT_WRITE_PREFIX&quot;</span><span class="hl opt">))</span>
+        <span class="hl kwd">strcpy</span> <span class="hl opt">(</span>mat_pref<span class="hl opt">,</span> <span class="hl kwd">getenv</span> <span class="hl opt">(</span><span class="hl str">&quot;IPOPT_WRITE_PREFIX&quot;</span><span class="hl opt">));</span>
+      <span class="hl kwa">else</span>
+        <span class="hl kwd">strcpy</span> <span class="hl opt">(</span>mat_pref<span class="hl opt">,</span> <span class="hl str">&quot;mat-ipopt&quot;</span><span class="hl opt">);</span>
+
+      <span class="hl kwd">Snprintf</span> <span class="hl opt">(</span>mat_name<span class="hl opt">,</span> <span class="hl num">127</span><span class="hl opt">,</span> <span class="hl str">&quot;%s_%03d-%02d.iajaa&quot;</span><span class="hl opt">,</span>
+                mat_pref<span class="hl opt">,</span> iter_cnt<span class="hl opt">,</span> sol_cnt<span class="hl opt">);</span>
+
+      <span class="hl slc">// Open and write matrix file.</span>
+      mat_file <span class="hl opt">=</span> <span class="hl kwd">fopen</span> <span class="hl opt">(</span>mat_name<span class="hl opt">,</span> <span class="hl str">&quot;w&quot;</span><span class="hl opt">);</span>
+
+      <span class="hl kwd">fprintf</span> <span class="hl opt">(</span>mat_file<span class="hl opt">,</span> <span class="hl str">&quot;%d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> N<span class="hl opt">);</span>
+      <span class="hl kwd">fprintf</span> <span class="hl opt">(</span>mat_file<span class="hl opt">,</span> <span class="hl str">&quot;%d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> NNZ<span class="hl opt">);</span>
+
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> N<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">;</span> i<span class="hl opt">++)</span>
+        <span class="hl kwd">fprintf</span> <span class="hl opt">(</span>mat_file<span class="hl opt">,</span> <span class="hl str">&quot;%d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> ia<span class="hl opt">[</span>i<span class="hl opt">]);</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> NNZ<span class="hl opt">;</span> i<span class="hl opt">++)</span>
+        <span class="hl kwd">fprintf</span> <span class="hl opt">(</span>mat_file<span class="hl opt">,</span> <span class="hl str">&quot;%d</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> ja<span class="hl opt">[</span>i<span class="hl opt">]);</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> NNZ<span class="hl opt">;</span> i<span class="hl opt">++)</span>
+        <span class="hl kwd">fprintf</span> <span class="hl opt">(</span>mat_file<span class="hl opt">,</span> <span class="hl str">&quot;%32.24e</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> a_<span class="hl opt">[</span>i<span class="hl opt">]);</span>
+
+      <span class="hl com">/* Right hand side. */</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>rhs_vals<span class="hl opt">)</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> N<span class="hl opt">;</span> i<span class="hl opt">++)</span>
+          <span class="hl kwd">fprintf</span> <span class="hl opt">(</span>mat_file<span class="hl opt">,</span> <span class="hl str">&quot;%32.24e</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> rhs_vals<span class="hl opt">[</span>i<span class="hl opt">]);</span>
+
+      <span class="hl kwd">fclose</span> <span class="hl opt">(</span>mat_file<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl com">/* addtional matrix format */</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">getenv</span> <span class="hl opt">(</span><span class="hl str">&quot;IPOPT_WRITE_MAT_MTX&quot;</span><span class="hl opt">)) {</span>
+      <span class="hl com">/* Write header */</span>
+      <span class="hl kwb">FILE</span>    <span class="hl opt">*</span>mat_file<span class="hl opt">;</span>
+      <span class="hl kwb">char</span>     mat_name<span class="hl opt">[</span><span class="hl num">128</span><span class="hl opt">];</span>
+      <span class="hl kwb">char</span>     mat_pref<span class="hl opt">[</span><span class="hl num">32</span><span class="hl opt">];</span>
+
+      ipfint   i<span class="hl opt">;</span>
+      ipfint   j<span class="hl opt">;</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">getenv</span> <span class="hl opt">(</span><span class="hl str">&quot;IPOPT_WRITE_PREFIX&quot;</span><span class="hl opt">))</span>
+        <span class="hl kwd">strcpy</span> <span class="hl opt">(</span>mat_pref<span class="hl opt">,</span> <span class="hl kwd">getenv</span> <span class="hl opt">(</span><span class="hl str">&quot;IPOPT_WRITE_PREFIX&quot;</span><span class="hl opt">));</span>
+      <span class="hl kwa">else</span>
+        <span class="hl kwd">strcpy</span> <span class="hl opt">(</span>mat_pref<span class="hl opt">,</span> <span class="hl str">&quot;mat-ipopt&quot;</span><span class="hl opt">);</span>
+
+      <span class="hl kwd">Snprintf</span> <span class="hl opt">(</span>mat_name<span class="hl opt">,</span> <span class="hl num">127</span><span class="hl opt">,</span> <span class="hl str">&quot;%s_%03d-%02d.mtx&quot;</span><span class="hl opt">,</span>
+                mat_pref<span class="hl opt">,</span> iter_cnt<span class="hl opt">,</span> sol_cnt<span class="hl opt">);</span>
+
+      <span class="hl slc">// Open and write matrix file.</span>
+      mat_file <span class="hl opt">=</span> <span class="hl kwd">fopen</span> <span class="hl opt">(</span>mat_name<span class="hl opt">,</span> <span class="hl str">&quot;w&quot;</span><span class="hl opt">);</span>
+
+      <span class="hl kwa">for</span> <span class="hl opt">(</span>i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> N<span class="hl opt">;</span> i<span class="hl opt">++)</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>j <span class="hl opt">=</span> ia<span class="hl opt">[</span>i<span class="hl opt">];</span> j <span class="hl opt">&lt;</span> ia<span class="hl opt">[</span>i<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">]-</span><span class="hl num">1</span><span class="hl opt">;</span> j<span class="hl opt">++)</span>
+          <span class="hl kwd">fprintf</span> <span class="hl opt">(</span>mat_file<span class="hl opt">,</span> <span class="hl str">&quot; %d %d %32.24e</span> <span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> i<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">,</span> ja<span class="hl opt">[</span>j<span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">],</span> a_<span class="hl opt">[</span>j<span class="hl opt">-</span><span class="hl num">1</span><span class="hl opt">]);</span>
+
+      <span class="hl kwd">fclose</span> <span class="hl opt">(</span>mat_file<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  ESymSolverStatus
+  PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">Factorization</span><span class="hl opt">(</span><span class="hl kwb">const</span> Index<span class="hl opt">*</span> ia<span class="hl opt">,</span>
+                                        <span class="hl kwb">const</span> Index<span class="hl opt">*</span> ja<span class="hl opt">,</span>
+                                        <span class="hl kwb">bool</span> check_NegEVals<span class="hl opt">,</span>
+                                        Index numberOfNegEVals<span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_START_METH</span><span class="hl opt">(</span><span class="hl str">&quot;PardisoSolverInterface::Factorization&quot;</span><span class="hl opt">,</span>dbg_verbosity<span class="hl opt">);</span>
+
+    <span class="hl slc">// Call Pardiso to do the factorization</span>
+    ipfint PHASE <span class="hl opt">;</span>
+    ipfint N <span class="hl opt">=</span> dim_<span class="hl opt">;</span>
+    ipfint PERM<span class="hl opt">;</span>   <span class="hl slc">// This should not be accessed by Pardiso</span>
+    ipfint NRHS <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwb">double</span> B<span class="hl opt">;</span>  <span class="hl slc">// This should not be accessed by Pardiso in factorization</span>
+    <span class="hl slc">// phase</span>
+    <span class="hl kwb">double</span> X<span class="hl opt">;</span>  <span class="hl slc">// This should not be accessed by Pardiso in factorization</span>
+    <span class="hl slc">// phase</span>
+    ipfint ERROR<span class="hl opt">;</span>
+
+    <span class="hl kwb">bool</span> done <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+    <span class="hl kwb">bool</span> just_performed_symbolic_factorization <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+
+    <span class="hl kwa">while</span> <span class="hl opt">(!</span>done<span class="hl opt">) {</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(!</span>have_symbolic_factorization_<span class="hl opt">) {</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+          <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">TimingStats</span><span class="hl opt">().</span><span class="hl kwd">LinearSystemSymbolicFactorization</span><span class="hl opt">().</span><span class="hl kwd">Start</span><span class="hl opt">();</span>
+        <span class="hl opt">}</span>
+        PHASE <span class="hl opt">=</span> <span class="hl num">11</span><span class="hl opt">;</span>
+
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+        <span class="hl kwa">delete</span><span class="hl opt">[]</span> ia2<span class="hl opt">;</span>
+        ia2 <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+        <span class="hl kwa">delete</span><span class="hl opt">[]</span> ja2<span class="hl opt">;</span>
+        ja2 <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+        <span class="hl kwa">delete</span><span class="hl opt">[]</span> a2_<span class="hl opt">;</span>
+        a2_ <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+        <span class="hl kwa">delete</span><span class="hl opt">[]</span> perm2<span class="hl opt">;</span>
+        perm2 <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+        <span class="hl kwa">delete</span><span class="hl opt">[]</span> scale2<span class="hl opt">;</span>
+        scale2 <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+
+        ia2    <span class="hl opt">=</span> <span class="hl kwa">new</span> ipfint<span class="hl opt">[</span>N<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span>
+        ja2    <span class="hl opt">=</span> <span class="hl kwa">new</span> ipfint<span class="hl opt">[</span>nonzeros_<span class="hl opt">];</span>
+        a2_    <span class="hl opt">=</span> <span class="hl kwa">new</span> <span class="hl kwb">double</span><span class="hl opt">[</span>nonzeros_<span class="hl opt">];</span>
+        perm2  <span class="hl opt">=</span> <span class="hl kwa">new</span> ipfint<span class="hl opt">[</span>N<span class="hl opt">];</span>
+        scale2 <span class="hl opt">=</span> <span class="hl kwa">new</span> <span class="hl kwb">double</span><span class="hl opt">[</span>N<span class="hl opt">];</span>
+        ipfint<span class="hl opt">*</span> tmp2_  <span class="hl opt">=</span> <span class="hl kwa">new</span> ipfint<span class="hl opt">[</span>N<span class="hl opt">];</span>
+
+        <span class="hl kwd">smat_reordering_pardiso_wsmp_</span><span class="hl opt">(&amp;</span>N<span class="hl opt">,</span> ia<span class="hl opt">,</span> ja<span class="hl opt">,</span> a_<span class="hl opt">,</span> ia2<span class="hl opt">,</span> ja2<span class="hl opt">,</span> a2_<span class="hl opt">,</span> perm2<span class="hl opt">,</span> scale2<span class="hl opt">,</span> tmp2_<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+        <span class="hl kwa">delete</span><span class="hl opt">[]</span> tmp2_<span class="hl opt">;</span>
+
+<span class="hl ppc">#endif</span>
+
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;Calling Pardiso for symbolic factorization.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+        <span class="hl kwd">PARDISO_FUNC</span><span class="hl opt">(</span>PT_<span class="hl opt">, &amp;</span>MAXFCT_<span class="hl opt">, &amp;</span>MNUM_<span class="hl opt">, &amp;</span>MTYPE_<span class="hl opt">,</span>
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+                     <span class="hl opt">&amp;</span>PHASE<span class="hl opt">, &amp;</span>N<span class="hl opt">,</span> a2_<span class="hl opt">,</span> ia2<span class="hl opt">,</span> ja2<span class="hl opt">, &amp;</span>PERM<span class="hl opt">,</span>
+<span class="hl ppc">#else</span>
+                     <span class="hl opt">&amp;</span>PHASE<span class="hl opt">, &amp;</span>N<span class="hl opt">,</span> a_<span class="hl opt">,</span> ia<span class="hl opt">,</span> ja<span class="hl opt">, &amp;</span>PERM<span class="hl opt">,</span>
+<span class="hl ppc">#endif</span>
+                     <span class="hl opt">&amp;</span>NRHS<span class="hl opt">,</span> IPARM_<span class="hl opt">, &amp;</span>MSGLVL_<span class="hl opt">, &amp;</span>B<span class="hl opt">, &amp;</span>X<span class="hl opt">,</span>
+                     <span class="hl opt">&amp;</span>ERROR<span class="hl opt">,</span> DPARM_<span class="hl opt">);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+          <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">TimingStats</span><span class="hl opt">().</span><span class="hl kwd">LinearSystemSymbolicFactorization</span><span class="hl opt">().</span><span class="hl kwd">End</span><span class="hl opt">();</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>ERROR<span class="hl opt">==-</span><span class="hl num">7</span><span class="hl opt">) {</span>
+          <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_MOREDETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                         <span class="hl str">&quot;Pardiso symbolic factorization returns ERROR = %d.  Matrix is singular.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> ERROR<span class="hl opt">);</span>
+          <span class="hl kwa">return</span> SYMSOLVER_SINGULAR<span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else if</span> <span class="hl opt">(</span>ERROR<span class="hl opt">!=</span><span class="hl num">0</span><span class="hl opt">) {</span>
+          <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_ERROR<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                         <span class="hl str">&quot;Error in Pardiso during symbolic factorization phase.  ERROR = %d.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> ERROR<span class="hl opt">);</span>
+          <span class="hl kwa">return</span> SYMSOLVER_FATAL_ERROR<span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+        have_symbolic_factorization_ <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+        just_performed_symbolic_factorization <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;Memory in KB required for the symbolic factorization  = %d.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> IPARM_<span class="hl opt">[</span><span class="hl num">14</span><span class="hl opt">]);</span>
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;Integer memory in KB required for the numerical factorization  = %d.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> IPARM_<span class="hl opt">[</span><span class="hl num">15</span><span class="hl opt">]);</span>
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;Double  memory in KB required for the numerical factorization  = %d.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> IPARM_<span class="hl opt">[</span><span class="hl num">16</span><span class="hl opt">]);</span>
+      <span class="hl opt">}</span>
+
+      PHASE <span class="hl opt">=</span> <span class="hl num">22</span><span class="hl opt">;</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+        <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">TimingStats</span><span class="hl opt">().</span><span class="hl kwd">LinearSystemFactorization</span><span class="hl opt">().</span><span class="hl kwd">Start</span><span class="hl opt">();</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_MOREDETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                     <span class="hl str">&quot;Calling Pardiso for factorization.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+      <span class="hl slc">// Dump matrix to file, and count number of solution steps.</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">iter_count</span><span class="hl opt">() !=</span> debug_last_iter_<span class="hl opt">)</span>
+          debug_cnt_ <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+        debug_last_iter_ <span class="hl opt">=</span> <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">iter_count</span><span class="hl opt">();</span>
+        debug_cnt_ <span class="hl opt">++;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        debug_cnt_ <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+        debug_last_iter_ <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+      ipfint<span class="hl opt">*</span> tmp3_  <span class="hl opt">=</span> <span class="hl kwa">new</span> ipfint<span class="hl opt">[</span>N<span class="hl opt">];</span>
+      <span class="hl kwd">smat_reordering_pardiso_wsmp_</span> <span class="hl opt">(&amp;</span>N<span class="hl opt">,</span> ia<span class="hl opt">,</span> ja<span class="hl opt">,</span> a_<span class="hl opt">,</span> ia2<span class="hl opt">,</span> ja2<span class="hl opt">,</span> a2_<span class="hl opt">,</span> perm2<span class="hl opt">,</span> scale2<span class="hl opt">,</span> tmp3_<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+      <span class="hl kwa">delete</span><span class="hl opt">[]</span> tmp3_<span class="hl opt">;</span>
+<span class="hl ppc">#endif</span>
+
+      <span class="hl kwd">PARDISO_FUNC</span><span class="hl opt">(</span>PT_<span class="hl opt">, &amp;</span>MAXFCT_<span class="hl opt">, &amp;</span>MNUM_<span class="hl opt">, &amp;</span>MTYPE_<span class="hl opt">,</span>
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+                   <span class="hl opt">&amp;</span>PHASE<span class="hl opt">, &amp;</span>N<span class="hl opt">,</span> a2_<span class="hl opt">,</span> ia2<span class="hl opt">,</span> ja2<span class="hl opt">, &amp;</span>PERM<span class="hl opt">,</span>
+<span class="hl ppc">#else</span>
+                   <span class="hl opt">&amp;</span>PHASE<span class="hl opt">, &amp;</span>N<span class="hl opt">,</span> a_<span class="hl opt">,</span> ia<span class="hl opt">,</span> ja<span class="hl opt">, &amp;</span>PERM<span class="hl opt">,</span>
+<span class="hl ppc">#endif</span>
+                   <span class="hl opt">&amp;</span>NRHS<span class="hl opt">,</span> IPARM_<span class="hl opt">, &amp;</span>MSGLVL_<span class="hl opt">, &amp;</span>B<span class="hl opt">, &amp;</span>X<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>ERROR<span class="hl opt">,</span> DPARM_<span class="hl opt">);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+        <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">TimingStats</span><span class="hl opt">().</span><span class="hl kwd">LinearSystemFactorization</span><span class="hl opt">().</span><span class="hl kwd">End</span><span class="hl opt">();</span>
+      <span class="hl opt">}</span>
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>ERROR<span class="hl opt">==-</span><span class="hl num">7</span><span class="hl opt">) {</span>
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_MOREDETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;Pardiso factorization returns ERROR = %d.  Matrix is singular.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> ERROR<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> SYMSOLVER_SINGULAR<span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>ERROR<span class="hl opt">==-</span><span class="hl num">4</span><span class="hl opt">) {</span>
+        <span class="hl slc">// I think this means that the matrix is singular</span>
+        <span class="hl slc">// OLAF said that this will never happen (ToDo)</span>
+        <span class="hl kwa">return</span> SYMSOLVER_SINGULAR<span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>ERROR<span class="hl opt">!=</span><span class="hl num">0</span> <span class="hl opt">) {</span>
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_ERROR<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;Error in Pardiso during factorization phase.  ERROR = %d.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> ERROR<span class="hl opt">);</span>
+        <span class="hl kwa">return</span> SYMSOLVER_FATAL_ERROR<span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+
+      negevals_ <span class="hl opt">=</span> <span class="hl kwd">Max</span><span class="hl opt">(</span>IPARM_<span class="hl opt">[</span><span class="hl num">22</span><span class="hl opt">],</span> numberOfNegEVals<span class="hl opt">);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>IPARM_<span class="hl opt">[</span><span class="hl num">13</span><span class="hl opt">] !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;Number of perturbed pivots in factorization phase = %d.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> IPARM_<span class="hl opt">[</span><span class="hl num">13</span><span class="hl opt">]);</span>
+        <span class="hl kwa">if</span> <span class="hl opt">( !</span>pardiso_redo_symbolic_fact_only_if_inertia_wrong_ <span class="hl opt">||</span>
+             <span class="hl opt">(</span>negevals_ <span class="hl opt">!=</span> numberOfNegEVals<span class="hl opt">) ) {</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+            <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">Append_info_string</span><span class="hl opt">(</span><span class="hl str">&quot;Pn&quot;</span><span class="hl opt">);</span>
+          <span class="hl opt">}</span>
+          have_symbolic_factorization_ <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+          <span class="hl slc">// We assume now that if there was just a symbolic</span>
+          <span class="hl slc">// factorization and we still have perturbed pivots, that</span>
+          <span class="hl slc">// the system is actually singular, if</span>
+          <span class="hl slc">// pardiso_repeated_perturbation_means_singular_ is true</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span>just_performed_symbolic_factorization<span class="hl opt">) {</span>
+            <span class="hl kwa">if</span> <span class="hl opt">(</span>pardiso_repeated_perturbation_means_singular_<span class="hl opt">) {</span>
+              <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+                <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">Append_info_string</span><span class="hl opt">(</span><span class="hl str">&quot;Ps&quot;</span><span class="hl opt">);</span>
+              <span class="hl opt">}</span>
+              <span class="hl kwa">return</span> SYMSOLVER_SINGULAR<span class="hl opt">;</span>
+            <span class="hl opt">}</span>
+            <span class="hl kwa">else</span> <span class="hl opt">{</span>
+              done <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+            <span class="hl opt">}</span>
+          <span class="hl opt">}</span>
+          <span class="hl kwa">else</span> <span class="hl opt">{</span>
+            done <span class="hl opt">=</span> <span class="hl kwa">false</span><span class="hl opt">;</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else</span> <span class="hl opt">{</span>
+          <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+            <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">Append_info_string</span><span class="hl opt">(</span><span class="hl str">&quot;Pp&quot;</span><span class="hl opt">);</span>
+          <span class="hl opt">}</span>
+          done <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        done <span class="hl opt">=</span> <span class="hl kwa">true</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span>IPARM_<span class="hl opt">[</span><span class="hl num">21</span><span class="hl opt">]+</span>IPARM_<span class="hl opt">[</span><span class="hl num">22</span><span class="hl opt">] ==</span> dim_<span class="hl opt">);</span>
+
+    <span class="hl slc">// Check whether the number of negative eigenvalues matches the requested</span>
+    <span class="hl slc">// count</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>skip_inertia_check_<span class="hl opt">)</span> numberOfNegEVals<span class="hl opt">=</span>negevals_<span class="hl opt">;</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>check_NegEVals <span class="hl opt">&amp;&amp; (</span>numberOfNegEVals<span class="hl opt">!=</span>negevals_<span class="hl opt">)) {</span>
+      <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                     <span class="hl str">&quot;Wrong inertia: required are %d, but we got %d.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+                     numberOfNegEVals<span class="hl opt">,</span> negevals_<span class="hl opt">);</span>
+      <span class="hl kwa">return</span> SYMSOLVER_WRONG_INERTIA<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">return</span> SYMSOLVER_SUCCESS<span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  ESymSolverStatus PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">Solve</span><span class="hl opt">(</span><span class="hl kwb">const</span> Index<span class="hl opt">*</span> ia<span class="hl opt">,</span>
+      <span class="hl kwb">const</span> Index<span class="hl opt">*</span> ja<span class="hl opt">,</span>
+      Index nrhs<span class="hl opt">,</span>
+      <span class="hl kwb">double</span> <span class="hl opt">*</span>rhs_vals<span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_START_METH</span><span class="hl opt">(</span><span class="hl str">&quot;PardisoSolverInterface::Solve&quot;</span><span class="hl opt">,</span>dbg_verbosity<span class="hl opt">);</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+      <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">TimingStats</span><span class="hl opt">().</span><span class="hl kwd">LinearSystemBackSolve</span><span class="hl opt">().</span><span class="hl kwd">Start</span><span class="hl opt">();</span>
+    <span class="hl opt">}</span>
+    <span class="hl slc">// Call Pardiso to do the solve for the given right-hand sides</span>
+    ipfint PHASE <span class="hl opt">=</span> <span class="hl num">33</span><span class="hl opt">;</span>
+    ipfint N <span class="hl opt">=</span> dim_<span class="hl opt">;</span>
+    ipfint PERM<span class="hl opt">;</span>   <span class="hl slc">// This should not be accessed by Pardiso</span>
+    ipfint NRHS <span class="hl opt">=</span> nrhs<span class="hl opt">;</span>
+    <span class="hl kwb">double</span><span class="hl opt">*</span> X <span class="hl opt">=</span> <span class="hl kwa">new</span> <span class="hl kwb">double</span><span class="hl opt">[</span>nrhs<span class="hl opt">*</span>dim_<span class="hl opt">];</span>
+
+    <span class="hl kwb">double</span><span class="hl opt">*</span> ORIG_RHS <span class="hl opt">=</span> <span class="hl kwa">new</span> <span class="hl kwb">double</span><span class="hl opt">[</span>nrhs<span class="hl opt">*</span>dim_<span class="hl opt">];</span>
+    ipfint ERROR<span class="hl opt">;</span>
+    <span class="hl slc">// Initialize solution with zero and save right hand side</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> N<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+      X<span class="hl opt">[</span>i<span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">.;</span>
+      ORIG_RHS<span class="hl opt">[</span>i<span class="hl opt">] =</span> rhs_vals<span class="hl opt">[</span>i<span class="hl opt">];</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// Dump matrix to file if requested</span>
+    Index iter_count <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+      iter_count <span class="hl opt">=</span> <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">iter_count</span><span class="hl opt">();</span>
+    <span class="hl opt">}</span>
+
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+    <span class="hl kwd">write_iajaa_matrix</span> <span class="hl opt">(</span>N<span class="hl opt">,</span> ia2<span class="hl opt">,</span> ja2<span class="hl opt">,</span> a2_<span class="hl opt">,</span> rhs_vals<span class="hl opt">,</span> iter_count<span class="hl opt">,</span> debug_cnt_<span class="hl opt">);</span>
+<span class="hl ppc">#else</span>
+    <span class="hl kwd">write_iajaa_matrix</span> <span class="hl opt">(</span>N<span class="hl opt">,</span>  ia<span class="hl opt">,</span>  ja<span class="hl opt">,</span>  a_<span class="hl opt">,</span> rhs_vals<span class="hl opt">,</span> iter_count<span class="hl opt">,</span> debug_cnt_<span class="hl opt">);</span>
+<span class="hl ppc">#endif</span>
+
+    <span class="hl kwb">int</span> attempts <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl kwb">const int</span> max_attempts <span class="hl opt">=</span>
+      pardiso_iterative_ ? pardiso_max_droptol_corrections_<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">:</span> <span class="hl num">1</span><span class="hl opt">;</span>
+
+    <span class="hl kwa">while</span> <span class="hl opt">(</span>attempts <span class="hl opt">&lt;</span> max_attempts<span class="hl opt">) {</span>
+
+
+<span class="hl ppc">#ifdef PARDISO_MATCHING_PREPROCESS</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> N<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        rhs_vals<span class="hl opt">[</span>perm2<span class="hl opt">[</span>i<span class="hl opt">]] =</span> scale2<span class="hl opt">[</span>i<span class="hl opt">] *</span> ORIG_RHS<span class="hl opt">[</span> i  <span class="hl opt">];</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwd">PARDISO_FUNC</span><span class="hl opt">(</span>PT_<span class="hl opt">, &amp;</span>MAXFCT_<span class="hl opt">, &amp;</span>MNUM_<span class="hl opt">, &amp;</span>MTYPE_<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>PHASE<span class="hl opt">, &amp;</span>N<span class="hl opt">,</span> a2_<span class="hl opt">,</span> ia2<span class="hl opt">,</span> ja2<span class="hl opt">, &amp;</span>PERM<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>NRHS<span class="hl opt">,</span> IPARM_<span class="hl opt">, &amp;</span>MSGLVL_<span class="hl opt">,</span> rhs_vals<span class="hl opt">,</span> X<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>ERROR<span class="hl opt">,</span> DPARM_<span class="hl opt">);</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> N<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        X<span class="hl opt">[</span>i<span class="hl opt">] =</span> rhs_vals<span class="hl opt">[</span> perm2<span class="hl opt">[</span>i<span class="hl opt">]];</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> N<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        rhs_vals<span class="hl opt">[</span>i<span class="hl opt">] =</span>  scale2<span class="hl opt">[</span>i<span class="hl opt">]*</span>X<span class="hl opt">[</span>i<span class="hl opt">];</span>
+      <span class="hl opt">}</span>
+
+<span class="hl ppc">#else</span>
+      <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> N<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        rhs_vals<span class="hl opt">[</span>i<span class="hl opt">] =</span> ORIG_RHS<span class="hl opt">[</span>i<span class="hl opt">];</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwd">PARDISO_FUNC</span><span class="hl opt">(</span>PT_<span class="hl opt">, &amp;</span>MAXFCT_<span class="hl opt">, &amp;</span>MNUM_<span class="hl opt">, &amp;</span>MTYPE_<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>PHASE<span class="hl opt">, &amp;</span>N<span class="hl opt">,</span> a_<span class="hl opt">,</span> ia<span class="hl opt">,</span> ja<span class="hl opt">, &amp;</span>PERM<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>NRHS<span class="hl opt">,</span> IPARM_<span class="hl opt">, &amp;</span>MSGLVL_<span class="hl opt">,</span> rhs_vals<span class="hl opt">,</span> X<span class="hl opt">,</span>
+                   <span class="hl opt">&amp;</span>ERROR<span class="hl opt">,</span> DPARM_<span class="hl opt">);</span>
+<span class="hl ppc">#endif</span>
+
+
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>ERROR <span class="hl opt">&lt;= -</span><span class="hl num">100</span> <span class="hl opt">&amp;&amp;</span> ERROR <span class="hl opt">&gt;= -</span><span class="hl num">102</span><span class="hl opt">) {</span>
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_WARNING<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;Iterative solver in Pardiso did not converge (ERROR = %d)</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> ERROR<span class="hl opt">);</span>
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_WARNING<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;  Decreasing drop tolerances from DPARM_[41] = %e and DPARM_[44] = %e</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> DPARM_<span class="hl opt">[</span><span class="hl num">41</span><span class="hl opt">],</span> DPARM_<span class="hl opt">[</span><span class="hl num">44</span><span class="hl opt">]);</span>
+        PHASE <span class="hl opt">=</span> <span class="hl num">23</span><span class="hl opt">;</span>
+        DPARM_<span class="hl opt">[</span><span class="hl num">4</span><span class="hl opt">] /=</span> <span class="hl num">2.0</span> <span class="hl opt">;</span>
+        DPARM_<span class="hl opt">[</span><span class="hl num">5</span><span class="hl opt">] /=</span> <span class="hl num">2.0</span> <span class="hl opt">;</span>
+        <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_WARNING<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                       <span class="hl str">&quot;                               to DPARM_[41] = %e and DPARM_[44] = %e</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> DPARM_<span class="hl opt">[</span><span class="hl num">41</span><span class="hl opt">],</span> DPARM_<span class="hl opt">[</span><span class="hl num">44</span><span class="hl opt">]);</span>
+        attempts<span class="hl opt">++;</span>
+        ERROR <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        attempts <span class="hl opt">=</span> max_attempts<span class="hl opt">;</span>
+        <span class="hl slc">// TODO we could try again with some PARDISO parameters changed, i.e., enabling iterative refinement</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">delete</span> <span class="hl opt">[]</span> X<span class="hl opt">;</span>
+    <span class="hl kwa">delete</span> <span class="hl opt">[]</span> ORIG_RHS<span class="hl opt">;</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>IPARM_<span class="hl opt">[</span><span class="hl num">6</span><span class="hl opt">] !=</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+      <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_DETAILED<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                     <span class="hl str">&quot;Number of iterative refinement steps = %d.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> IPARM_<span class="hl opt">[</span><span class="hl num">6</span><span class="hl opt">]);</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+        <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">Append_info_string</span><span class="hl opt">(</span><span class="hl str">&quot;Pi&quot;</span><span class="hl opt">);</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">HaveIpData</span><span class="hl opt">()) {</span>
+      <span class="hl kwd">IpData</span><span class="hl opt">().</span><span class="hl kwd">TimingStats</span><span class="hl opt">().</span><span class="hl kwd">LinearSystemBackSolve</span><span class="hl opt">().</span><span class="hl kwd">End</span><span class="hl opt">();</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>ERROR<span class="hl opt">!=</span><span class="hl num">0</span> <span class="hl opt">) {</span>
+      <span class="hl kwd">Jnlst</span><span class="hl opt">().</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>J_ERROR<span class="hl opt">,</span> J_LINEAR_ALGEBRA<span class="hl opt">,</span>
+                     <span class="hl str">&quot;Error in Pardiso during solve phase.  ERROR = %d.</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> ERROR<span class="hl opt">);</span>
+      <span class="hl kwa">return</span> SYMSOLVER_FATAL_ERROR<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">return</span> SYMSOLVER_SUCCESS<span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  Index PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">NumberOfNegEVals</span><span class="hl opt">()</span> <span class="hl kwb">const</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_START_METH</span><span class="hl opt">(</span><span class="hl str">&quot;PardisoSolverInterface::NumberOfNegEVals&quot;</span><span class="hl opt">,</span>dbg_verbosity<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span>negevals_<span class="hl opt">&gt;=</span><span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl kwa">return</span> negevals_<span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">bool</span> PardisoSolverInterface<span class="hl opt">::</span><span class="hl kwd">IncreaseQuality</span><span class="hl opt">()</span>
+  <span class="hl opt">{</span>
+    <span class="hl slc">// At the moment, I don't see how we could tell Pardiso to do better</span>
+    <span class="hl slc">// (maybe switch from IPARM[20]=1 to IPARM[20]=2?)</span>
+    <span class="hl kwa">return false</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+
+<span class="hl opt">}</span> <span class="hl slc">// namespace Ipopt</span>
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->

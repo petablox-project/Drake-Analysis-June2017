@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/libbot/bot2-frames/src/renderer/frame_modifier_renderer.c</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl ppc">#include &lt;stdio.h&gt;</span>
+<span class="hl ppc">#include &lt;stdlib.h&gt;</span>
+<span class="hl ppc">#include &lt;string.h&gt;</span>
+<span class="hl ppc">#include &lt;assert.h&gt;</span>
+
+<span class="hl ppc">#ifdef __APPLE__</span>
+<span class="hl ppc">#include &lt;OpenGL/gl.h&gt;</span>
+<span class="hl ppc">#include &lt;OpenGL/glu.h&gt;</span>
+<span class="hl ppc">#else</span>
+<span class="hl ppc">#include &lt;GL/gl.h&gt;</span>
+<span class="hl ppc">#include &lt;GL/glu.h&gt;</span>
+<span class="hl ppc">#endif</span>
+<span class="hl ppc">#include &lt;gtk/gtk.h&gt;</span>
+
+<span class="hl ppc">#include &lt;lcm/lcm.h&gt;</span>
+
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;bot_frames_renderers.h&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include &lt;bot_core/bot_core.h&gt;</span>
+<span class="hl ppc">#include &lt;bot_vis/bot_vis.h&gt;</span>
+<span class="hl ppc">#include &lt;bot_vis/viewer.h&gt;</span>
+<span class="hl ppc">#include &lt;bot_param/param_client.h&gt;</span>
+<span class="hl ppc">#include &lt;bot_frames/bot_frames.h&gt;</span>
+
+<span class="hl ppc">#define RENDERER_NAME</span> <span class="hl pps">&quot;Frame Modifier&quot;</span><span class="hl ppc"></span>
+
+<span class="hl ppc">#define PARAM_FRAME_SELECT</span> <span class="hl pps">&quot;Frame&quot;</span><span class="hl ppc"></span>
+
+<span class="hl ppc">#define PARAM_X</span>         <span class="hl pps">&quot;X    &quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#define PARAM_Y</span>         <span class="hl pps">&quot;Y    &quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#define PARAM_Z</span>         <span class="hl pps">&quot;Z    &quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#define PARAM_ROLL</span>      <span class="hl pps">&quot;Roll &quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#define PARAM_PITCH</span>     <span class="hl pps">&quot;Pitch&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#define PARAM_YAW</span>       <span class="hl pps">&quot;Yaw  &quot;</span><span class="hl ppc"></span>
+
+<span class="hl ppc">#define PARAM_SAVE</span>  <span class="hl pps">&quot;Save Calib&quot;</span><span class="hl ppc"></span>
+
+<span class="hl kwc">typedef</span> <span class="hl kwb">struct</span> _RendererFrames <span class="hl opt">{</span>
+
+  BotRenderer renderer<span class="hl opt">;</span>
+  BotEventHandler ehandler<span class="hl opt">;</span>
+  BotViewer <span class="hl opt">*</span>viewer<span class="hl opt">;</span>
+  BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">;</span>
+
+  BotFrames <span class="hl opt">*</span> frames<span class="hl opt">;</span>
+
+  <span class="hl kwb">const char</span> <span class="hl opt">*</span> rootFrame<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> numFrames<span class="hl opt">;</span>
+  <span class="hl kwb">char</span> <span class="hl opt">**</span> frameNames<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> <span class="hl opt">*</span> frameNums<span class="hl opt">;</span>
+
+  <span class="hl kwb">int</span> updating<span class="hl opt">;</span>
+
+<span class="hl opt">}</span> RendererFrames<span class="hl opt">;</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">destroy_renderer_frames</span><span class="hl opt">(</span>BotRenderer <span class="hl opt">*</span>super<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  RendererFrames <span class="hl opt">*</span>self <span class="hl opt">= (</span>RendererFrames<span class="hl opt">*)</span> super<span class="hl opt">-&gt;</span>user<span class="hl opt">;</span>
+
+  <span class="hl kwd">free</span><span class="hl opt">(</span>self<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">draw</span><span class="hl opt">(</span>BotViewer <span class="hl opt">*</span>viewer<span class="hl opt">,</span> BotRenderer <span class="hl opt">*</span>super<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  RendererFrames <span class="hl opt">*</span>self <span class="hl opt">= (</span>RendererFrames<span class="hl opt">*)</span> super<span class="hl opt">-&gt;</span>user<span class="hl opt">;</span>
+  <span class="hl slc">//nothing to draw</span>
+
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">frames_update_handler</span><span class="hl opt">(</span>BotFrames <span class="hl opt">*</span>bot_frames<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>frame<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span> relative_to<span class="hl opt">,</span> <span class="hl kwb">int64_t</span> utime<span class="hl opt">,</span>
+    <span class="hl kwb">void</span> <span class="hl opt">*</span>user<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  RendererFrames <span class="hl opt">*</span>self <span class="hl opt">= (</span>RendererFrames <span class="hl opt">*)</span> user<span class="hl opt">;</span>
+  BotTrans tran<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> activeSensorNum <span class="hl opt">=</span> <span class="hl kwd">bot_gtk_param_widget_get_enum</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_FRAME_SELECT<span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>activeSensorNum <span class="hl opt">&gt;</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span> activeSensorName <span class="hl opt">=</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">];</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>frame<span class="hl opt">,</span> activeSensorName<span class="hl opt">) ==</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+      <span class="hl kwb">const char</span> <span class="hl opt">*</span> relative_to <span class="hl opt">=</span> <span class="hl kwd">bot_frames_get_relative_to</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span> activeSensorName<span class="hl opt">);</span>
+      <span class="hl kwd">bot_frames_get_trans</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span> activeSensorName<span class="hl opt">,</span> relative_to<span class="hl opt">, &amp;</span>tran<span class="hl opt">);</span>
+      <span class="hl kwb">double</span> rpy<span class="hl opt">[</span><span class="hl num">3</span><span class="hl opt">];</span>
+      <span class="hl kwd">bot_quat_to_roll_pitch_yaw</span><span class="hl opt">(</span>tran<span class="hl opt">.</span>rot_quat<span class="hl opt">,</span> rpy<span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_X<span class="hl opt">,</span> tran<span class="hl opt">.</span>trans_vec<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Y<span class="hl opt">,</span> tran<span class="hl opt">.</span>trans_vec<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Z<span class="hl opt">,</span> tran<span class="hl opt">.</span>trans_vec<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_ROLL<span class="hl opt">,</span> <span class="hl kwd">bot_to_degrees</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]));</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_PITCH<span class="hl opt">,</span> <span class="hl kwd">bot_to_degrees</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]));</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_YAW<span class="hl opt">,</span> <span class="hl kwd">bot_to_degrees</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]));</span>
+      self<span class="hl opt">-&gt;</span>updating <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+  <span class="hl kwd">bot_viewer_request_redraw</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>viewer<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span> <span class="hl kwd">on_param_widget_changed</span><span class="hl opt">(</span>BotGtkParamWidget <span class="hl opt">*</span>pw<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>name<span class="hl opt">,</span> <span class="hl kwb">void</span> <span class="hl opt">*</span>user<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+  RendererFrames <span class="hl opt">*</span>self <span class="hl opt">= (</span>RendererFrames<span class="hl opt">*)</span> user<span class="hl opt">;</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>updating<span class="hl opt">) {</span>
+    <span class="hl kwa">return</span><span class="hl opt">;</span>
+  <span class="hl opt">}</span>
+  BotViewer <span class="hl opt">*</span>viewer <span class="hl opt">=</span> self<span class="hl opt">-&gt;</span>viewer<span class="hl opt">;</span>
+  <span class="hl kwb">int</span> activeSensorNum <span class="hl opt">=</span> <span class="hl kwd">bot_gtk_param_widget_get_enum</span><span class="hl opt">(</span>pw<span class="hl opt">,</span> PARAM_FRAME_SELECT<span class="hl opt">);</span>
+  <span class="hl kwa">if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>name<span class="hl opt">,</span> PARAM_FRAME_SELECT<span class="hl opt">)) {</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>activeSensorNum <span class="hl opt">&gt;</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+      self<span class="hl opt">-&gt;</span>updating <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+      <span class="hl kwd">bot_viewer_set_status_bar_message</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>viewer<span class="hl opt">,</span> <span class="hl str">&quot;Modify Calibration relative to %s&quot;</span><span class="hl opt">,</span> <span class="hl kwd">bot_frames_get_relative_to</span><span class="hl opt">(</span>
+          self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">]));</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_X<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Y<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Z<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_ROLL<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_PITCH<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_YAW<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_SAVE<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">);</span>
+      <span class="hl kwd">frames_update_handler</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">],</span> <span class="hl kwd">bot_frames_get_relative_to</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span>
+          self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">]),</span> <span class="hl kwd">bot_timestamp_now</span><span class="hl opt">(),</span> self<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      <span class="hl kwd">bot_viewer_set_status_bar_message</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>viewer<span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_X<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Y<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Z<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_ROLL<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_PITCH<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_YAW<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_SAVE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+  <span class="hl kwa">else if</span> <span class="hl opt">(!</span><span class="hl kwd">strcmp</span><span class="hl opt">(</span>name<span class="hl opt">,</span> PARAM_SAVE<span class="hl opt">) &amp;&amp;</span> activeSensorNum <span class="hl opt">&gt;</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    <span class="hl kwb">char</span> save_fname<span class="hl opt">[</span><span class="hl num">1024</span><span class="hl opt">];</span>
+    <span class="hl kwd">sprintf</span><span class="hl opt">(</span>save_fname<span class="hl opt">,</span> <span class="hl str">&quot;manual_calib_%s.cfg&quot;</span><span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">]);</span>
+    <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> <span class="hl str">&quot;saving params to: %s</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span> save_fname<span class="hl opt">);</span>
+    <span class="hl kwb">FILE</span> <span class="hl opt">*</span> f <span class="hl opt">=</span> <span class="hl kwd">fopen</span><span class="hl opt">(</span>save_fname<span class="hl opt">,</span> <span class="hl str">&quot;w&quot;</span><span class="hl opt">);</span>
+    <span class="hl kwb">double</span> pos<span class="hl opt">[</span><span class="hl num">3</span><span class="hl opt">];</span>
+    pos<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_X<span class="hl opt">);</span>
+    pos<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Y<span class="hl opt">);</span>
+    pos<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] =</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Z<span class="hl opt">);</span>
+    <span class="hl kwb">double</span> rpy<span class="hl opt">[</span><span class="hl num">3</span><span class="hl opt">];</span>
+    rpy<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_ROLL<span class="hl opt">);</span>
+    rpy<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_PITCH<span class="hl opt">);</span>
+    rpy<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] =</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_YAW<span class="hl opt">);</span>
+
+    <span class="hl kwb">double</span> rpy_rad<span class="hl opt">[</span><span class="hl num">3</span><span class="hl opt">];</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> <span class="hl num">3</span><span class="hl opt">;</span> i<span class="hl opt">++)</span>
+      rpy_rad<span class="hl opt">[</span>i<span class="hl opt">] =</span> <span class="hl kwd">bot_to_radians</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span>i<span class="hl opt">]);</span>
+    <span class="hl kwb">double</span> quat<span class="hl opt">[</span><span class="hl num">4</span><span class="hl opt">];</span>
+    <span class="hl kwd">bot_roll_pitch_yaw_to_quat</span><span class="hl opt">(</span>rpy_rad<span class="hl opt">,</span> quat<span class="hl opt">);</span>
+    <span class="hl kwb">double</span> rod<span class="hl opt">[</span><span class="hl num">3</span><span class="hl opt">];</span>
+    <span class="hl kwd">bot_quat_to_rodrigues</span><span class="hl opt">(</span>quat<span class="hl opt">,</span> rod<span class="hl opt">);</span>
+
+    <span class="hl kwd">fprintf</span><span class="hl opt">(</span>f<span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span>
+      <span class="hl str">&quot;%s {</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+      <span class="hl str">&quot;position = [%f, %f, %f];</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+      <span class="hl str">&quot;rpy = [%f, %f, %f];</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+      <span class="hl str">&quot;relative_to =</span> <span class="hl esc">\&quot;</span><span class="hl str">%s</span><span class="hl esc">\&quot;</span><span class="hl str">;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+      <span class="hl str">&quot;}&quot;</span><span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">],</span> pos<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pos<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> pos<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> rpy<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> rpy<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> rpy<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span>
+        <span class="hl kwd">bot_frames_get_relative_to</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">]));</span>
+    <span class="hl kwd">fprintf</span><span class="hl opt">(</span>f<span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span>
+      <span class="hl str">&quot;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+      <span class="hl str">&quot;%s {</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+      <span class="hl str">&quot;position = [%f, %f, %f];</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+      <span class="hl str">&quot;rodrigues = [%f, %f, %f];</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+      <span class="hl str">&quot;relative_to =</span> <span class="hl esc">\&quot;</span><span class="hl str">%s</span><span class="hl esc">\&quot;</span><span class="hl str">;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+      <span class="hl str">&quot;}&quot;</span><span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">],</span> pos<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> pos<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> pos<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span> rod<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">],</span> rod<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">],</span> rod<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">],</span>
+        <span class="hl kwd">bot_frames_get_relative_to</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">]));</span>
+
+    <span class="hl kwd">fclose</span><span class="hl opt">(</span>f<span class="hl opt">);</span>
+    <span class="hl kwd">bot_viewer_set_status_bar_message</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>viewer<span class="hl opt">,</span> <span class="hl str">&quot;Calibration saved to %s&quot;</span><span class="hl opt">,</span> save_fname<span class="hl opt">);</span>
+
+  <span class="hl opt">}</span>
+  <span class="hl kwa">else if</span> <span class="hl opt">(</span>activeSensorNum <span class="hl opt">&gt;</span> <span class="hl num">0</span><span class="hl opt">) {</span>
+    self<span class="hl opt">-&gt;</span>updating <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+    BotTrans curr<span class="hl opt">;</span>
+    curr<span class="hl opt">.</span>trans_vec<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_X<span class="hl opt">);</span>
+    curr<span class="hl opt">.</span>trans_vec<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Y<span class="hl opt">);</span>
+    curr<span class="hl opt">.</span>trans_vec<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] =</span> <span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Z<span class="hl opt">);</span>
+
+    <span class="hl kwb">double</span> rpy<span class="hl opt">[</span><span class="hl num">3</span><span class="hl opt">];</span>
+    rpy<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl kwd">bot_to_radians</span><span class="hl opt">(</span><span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_ROLL<span class="hl opt">));</span>
+    rpy<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">] =</span> <span class="hl kwd">bot_to_radians</span><span class="hl opt">(</span><span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_PITCH<span class="hl opt">));</span>
+    rpy<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">] =</span> <span class="hl kwd">bot_to_radians</span><span class="hl opt">(</span><span class="hl kwd">bot_gtk_param_widget_get_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_YAW<span class="hl opt">));</span>
+    <span class="hl kwd">bot_roll_pitch_yaw_to_quat</span><span class="hl opt">(</span>rpy<span class="hl opt">,</span> curr<span class="hl opt">.</span>rot_quat<span class="hl opt">);</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">fabs</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">]) &gt;</span> M_PI <span class="hl opt">||</span> <span class="hl kwd">fabs</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">]) &gt;</span> M_PI <span class="hl opt">||</span> <span class="hl kwd">fabs</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">]) &gt;</span> M_PI<span class="hl opt">) {</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_ROLL<span class="hl opt">,</span> <span class="hl kwd">bot_to_degrees</span><span class="hl opt">(</span><span class="hl kwd">bot_mod2pi</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">])));</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_PITCH<span class="hl opt">,</span> <span class="hl kwd">bot_to_degrees</span><span class="hl opt">(</span><span class="hl kwd">bot_mod2pi</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span><span class="hl num">1</span><span class="hl opt">])));</span>
+      <span class="hl kwd">bot_gtk_param_widget_set_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_YAW<span class="hl opt">,</span> <span class="hl kwd">bot_to_degrees</span><span class="hl opt">(</span><span class="hl kwd">bot_mod2pi</span><span class="hl opt">(</span>rpy<span class="hl opt">[</span><span class="hl num">2</span><span class="hl opt">])));</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">//and update the link</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span> frame_name <span class="hl opt">=</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>activeSensorNum<span class="hl opt">];</span>
+    <span class="hl kwb">const char</span> <span class="hl opt">*</span> relative_to <span class="hl opt">=</span> <span class="hl kwd">bot_frames_get_relative_to</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span> frame_name<span class="hl opt">);</span>
+    <span class="hl kwd">bot_frames_update_frame</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span> frame_name<span class="hl opt">,</span> relative_to<span class="hl opt">, &amp;</span>curr<span class="hl opt">,</span> <span class="hl kwd">bot_timestamp_now</span><span class="hl opt">());</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwd">bot_viewer_request_redraw</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>viewer<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> <span class="hl kwd">bot_frames_add_frame_modifier_to_viewer</span><span class="hl opt">(</span>BotViewer <span class="hl opt">*</span>viewer<span class="hl opt">,</span> <span class="hl kwb">int</span> render_priority<span class="hl opt">,</span> BotFrames <span class="hl opt">*</span> frames<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+
+  RendererFrames <span class="hl opt">*</span>self <span class="hl opt">= (</span>RendererFrames<span class="hl opt">*)</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>RendererFrames<span class="hl opt">));</span>
+
+  BotRenderer <span class="hl opt">*</span>renderer <span class="hl opt">= &amp;</span>self<span class="hl opt">-&gt;</span>renderer<span class="hl opt">;</span>
+
+  renderer<span class="hl opt">-&gt;</span>draw <span class="hl opt">=</span> draw<span class="hl opt">;</span>
+  renderer<span class="hl opt">-&gt;</span>destroy <span class="hl opt">=</span> destroy_renderer_frames<span class="hl opt">;</span>
+
+  renderer<span class="hl opt">-&gt;</span>widget <span class="hl opt">=</span> <span class="hl kwd">gtk_vbox_new</span><span class="hl opt">(</span>FALSE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  renderer<span class="hl opt">-&gt;</span>name <span class="hl opt">=</span> <span class="hl kwd">strdup</span><span class="hl opt">(</span>RENDERER_NAME<span class="hl opt">);</span>
+  renderer<span class="hl opt">-&gt;</span>user <span class="hl opt">=</span> self<span class="hl opt">;</span>
+  renderer<span class="hl opt">-&gt;</span>enabled <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+
+  BotEventHandler <span class="hl opt">*</span>ehandler <span class="hl opt">= &amp;</span>self<span class="hl opt">-&gt;</span>ehandler<span class="hl opt">;</span>
+  ehandler<span class="hl opt">-&gt;</span>name <span class="hl opt">=</span> renderer<span class="hl opt">-&gt;</span>name<span class="hl opt">;</span>
+  ehandler<span class="hl opt">-&gt;</span>enabled <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+  ehandler<span class="hl opt">-&gt;</span>pick_query <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+  ehandler<span class="hl opt">-&gt;</span>key_press <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+  ehandler<span class="hl opt">-&gt;</span>hover_query <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+  ehandler<span class="hl opt">-&gt;</span>mouse_press <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+  ehandler<span class="hl opt">-&gt;</span>mouse_release <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+  ehandler<span class="hl opt">-&gt;</span>mouse_motion <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+  ehandler<span class="hl opt">-&gt;</span>user <span class="hl opt">=</span> self<span class="hl opt">;</span>
+
+  self<span class="hl opt">-&gt;</span>viewer <span class="hl opt">=</span> viewer<span class="hl opt">;</span>
+  self<span class="hl opt">-&gt;</span>frames <span class="hl opt">=</span> frames<span class="hl opt">;</span>
+  <span class="hl kwd">bot_frames_add_update_subscriber</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">,</span> frames_update_handler<span class="hl opt">, (</span><span class="hl kwb">void</span> <span class="hl opt">*)</span> self<span class="hl opt">);</span>
+
+  self<span class="hl opt">-&gt;</span>pw <span class="hl opt">=</span> <span class="hl kwd">BOT_GTK_PARAM_WIDGET</span><span class="hl opt">(</span><span class="hl kwd">bot_gtk_param_widget_new</span><span class="hl opt">());</span>
+
+  self<span class="hl opt">-&gt;</span>rootFrame <span class="hl opt">=</span> <span class="hl kwd">bot_frames_get_root_name</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">);</span>
+  <span class="hl kwb">int</span> num_frames <span class="hl opt">=</span> <span class="hl kwd">bot_frames_get_num_frames</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">);</span>
+
+  <span class="hl kwb">char</span> <span class="hl opt">**</span> frame_names <span class="hl opt">=</span> <span class="hl kwd">bot_frames_get_frame_names</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>frames<span class="hl opt">);</span>
+
+  self<span class="hl opt">-&gt;</span>numFrames <span class="hl opt">=</span> num_frames <span class="hl opt">+</span> <span class="hl num">1</span><span class="hl opt">;</span> <span class="hl slc">//need space for extra &quot;empty&quot; one</span>
+  self<span class="hl opt">-&gt;</span>frameNames <span class="hl opt">=</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>numFrames<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">char</span> <span class="hl opt">*));</span>
+  self<span class="hl opt">-&gt;</span>frameNums <span class="hl opt">=</span> <span class="hl kwd">calloc</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>numFrames<span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">int</span><span class="hl opt">));</span>
+  self<span class="hl opt">-&gt;</span>frameNums<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl num">0</span><span class="hl opt">;</span>
+  self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span><span class="hl num">0</span><span class="hl opt">] =</span> <span class="hl str">&quot;&quot;</span><span class="hl opt">;</span>
+  <span class="hl kwa">for</span> <span class="hl opt">(</span><span class="hl kwb">int</span> i <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span> i <span class="hl opt">&lt;</span> self<span class="hl opt">-&gt;</span>numFrames<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+    self<span class="hl opt">-&gt;</span>frameNums<span class="hl opt">[</span>i<span class="hl opt">] =</span> i<span class="hl opt">;</span>
+    self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">[</span>i<span class="hl opt">] =</span> <span class="hl kwd">strdup</span><span class="hl opt">(</span>frame_names<span class="hl opt">[</span>i <span class="hl opt">-</span> <span class="hl num">1</span><span class="hl opt">]);</span>
+  <span class="hl opt">}</span>
+  <span class="hl kwd">g_strfreev</span><span class="hl opt">(</span>frame_names<span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_add_enumv</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_FRAME_SELECT<span class="hl opt">,</span> BOT_GTK_PARAM_WIDGET_DEFAULTS<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>numFrames<span class="hl opt">,</span>
+      <span class="hl opt">(</span><span class="hl kwb">const char</span> <span class="hl opt">**)</span> self<span class="hl opt">-&gt;</span>frameNames<span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>frameNums<span class="hl opt">);</span>
+
+  <span class="hl kwd">gtk_box_pack_start</span><span class="hl opt">(</span><span class="hl kwd">GTK_BOX</span><span class="hl opt">(</span>renderer<span class="hl opt">-&gt;</span>widget<span class="hl opt">),</span> <span class="hl kwd">GTK_WIDGET</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">),</span> TRUE<span class="hl opt">,</span> TRUE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+  <span class="hl kwd">bot_gtk_param_widget_add_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_X<span class="hl opt">,</span> BOT_GTK_PARAM_WIDGET_SPINBOX<span class="hl opt">, -</span><span class="hl num">1000</span><span class="hl opt">,</span> <span class="hl num">1000</span><span class="hl opt">,</span> <span class="hl num">0.001</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_add_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Y<span class="hl opt">,</span> BOT_GTK_PARAM_WIDGET_SPINBOX<span class="hl opt">, -</span><span class="hl num">1000</span><span class="hl opt">,</span> <span class="hl num">1000</span><span class="hl opt">,</span> <span class="hl num">0.001</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_add_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Z<span class="hl opt">,</span> BOT_GTK_PARAM_WIDGET_SPINBOX<span class="hl opt">, -</span><span class="hl num">1000</span><span class="hl opt">,</span> <span class="hl num">1000</span><span class="hl opt">,</span> <span class="hl num">0.001</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_add_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_ROLL<span class="hl opt">,</span> BOT_GTK_PARAM_WIDGET_SPINBOX<span class="hl opt">, -</span><span class="hl num">181</span><span class="hl opt">,</span> <span class="hl num">181</span><span class="hl opt">,</span> <span class="hl num">0.1</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_add_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_PITCH<span class="hl opt">,</span> BOT_GTK_PARAM_WIDGET_SPINBOX<span class="hl opt">, -</span><span class="hl num">181</span><span class="hl opt">,</span> <span class="hl num">181</span><span class="hl opt">,</span> <span class="hl num">0.1</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_add_double</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_YAW<span class="hl opt">,</span> BOT_GTK_PARAM_WIDGET_SPINBOX<span class="hl opt">, -</span><span class="hl num">181</span><span class="hl opt">,</span> <span class="hl num">181</span><span class="hl opt">,</span> <span class="hl num">0.1</span><span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+  <span class="hl kwd">bot_gtk_param_widget_add_separator</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_add_buttons</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_SAVE<span class="hl opt">,</span> NULL<span class="hl opt">);</span>
+
+  <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_X<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Y<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_Z<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_ROLL<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_PITCH<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_YAW<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+  <span class="hl kwd">bot_gtk_param_widget_set_enabled</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> PARAM_SAVE<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">);</span>
+
+  <span class="hl kwd">gtk_widget_show_all</span><span class="hl opt">(</span>renderer<span class="hl opt">-&gt;</span>widget<span class="hl opt">);</span>
+
+  <span class="hl kwd">g_signal_connect</span><span class="hl opt">(</span><span class="hl kwd">G_OBJECT</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">),</span> <span class="hl str">&quot;changed&quot;</span><span class="hl opt">,</span> <span class="hl kwd">G_CALLBACK</span><span class="hl opt">(</span>on_param_widget_changed<span class="hl opt">),</span> self<span class="hl opt">);</span>
+  <span class="hl kwd">on_param_widget_changed</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>pw<span class="hl opt">,</span> <span class="hl str">&quot;&quot;</span><span class="hl opt">,</span> self<span class="hl opt">);</span>
+
+  <span class="hl kwd">bot_viewer_add_renderer</span><span class="hl opt">(</span>viewer<span class="hl opt">, &amp;</span>self<span class="hl opt">-&gt;</span>renderer<span class="hl opt">,</span> render_priority<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->

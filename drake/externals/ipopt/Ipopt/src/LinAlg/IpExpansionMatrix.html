@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/ipopt/Ipopt/src/LinAlg/IpExpansionMatrix.cpp</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl slc">// Copyright (C) 2004, 2009 International Business Machines and others.</span>
+<span class="hl slc">// All Rights Reserved.</span>
+<span class="hl slc">// This code is published under the Eclipse Public License.</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// $Id: IpExpansionMatrix.cpp 2269 2013-05-05 11:32:40Z stefan $</span>
+<span class="hl slc">//</span>
+<span class="hl slc">// Authors:  Carl Laird, Andreas Waechter     IBM    2004-08-13</span>
+
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;IpExpansionMatrix.hpp&quot;</span><span class="hl ppc"></span>
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;IpDenseVector.hpp&quot;</span><span class="hl ppc"></span>
+
+<span class="hl kwa">namespace</span> Ipopt
+<span class="hl opt">{</span>
+
+<span class="hl ppc">#if COIN_IPOPT_VERBOSITY &gt; 0</span>
+  <span class="hl kwb">static const</span> Index dbg_verbosity <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+<span class="hl ppc">#endif</span>
+
+  ExpansionMatrix<span class="hl opt">::</span><span class="hl kwd">ExpansionMatrix</span><span class="hl opt">(</span><span class="hl kwb">const</span> ExpansionMatrixSpace<span class="hl opt">*</span> owner_space<span class="hl opt">)</span>
+      <span class="hl opt">:</span>
+      <span class="hl kwd">Matrix</span><span class="hl opt">(</span>owner_space<span class="hl opt">),</span>
+      <span class="hl kwd">owner_space_</span><span class="hl opt">(</span>owner_space<span class="hl opt">)</span>
+  <span class="hl opt">{}</span>
+
+  ExpansionMatrix<span class="hl opt">::~</span><span class="hl kwd">ExpansionMatrix</span><span class="hl opt">()</span>
+  <span class="hl opt">{}</span>
+
+  <span class="hl kwb">void</span> ExpansionMatrix<span class="hl opt">::</span><span class="hl kwd">MultVectorImpl</span><span class="hl opt">(</span>Number alpha<span class="hl opt">,</span> <span class="hl kwb">const</span> Vector <span class="hl opt">&amp;</span>x<span class="hl opt">,</span>
+                                       Number beta<span class="hl opt">,</span> Vector <span class="hl opt">&amp;</span>y<span class="hl opt">)</span> <span class="hl kwb">const</span>
+  <span class="hl opt">{</span>
+    <span class="hl slc">//  A few sanity checks</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NCols</span><span class="hl opt">()==</span>x<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NRows</span><span class="hl opt">()==</span>y<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+
+    <span class="hl slc">// Take care of the y part of the addition</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span> beta<span class="hl opt">!=</span><span class="hl num">0.0</span> <span class="hl opt">) {</span>
+      y<span class="hl opt">.</span><span class="hl kwd">Scal</span><span class="hl opt">(</span>beta<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      y<span class="hl opt">.</span><span class="hl kwd">Set</span><span class="hl opt">(</span><span class="hl num">0.0</span><span class="hl opt">);</span>  <span class="hl slc">// In case y hasn't been initialized yet</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// See if we can understand the data</span>
+    <span class="hl kwb">const</span> DenseVector<span class="hl opt">*</span> dense_x <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>x<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>x<span class="hl opt">));</span>
+    DenseVector<span class="hl opt">*</span> dense_y <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>y<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>y<span class="hl opt">));</span>
+
+    <span class="hl kwb">const</span> Index<span class="hl opt">*</span> exp_pos <span class="hl opt">=</span> <span class="hl kwd">ExpandedPosIndices</span><span class="hl opt">();</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_x <span class="hl opt">&amp;&amp;</span> dense_y<span class="hl opt">) {</span>
+      Number<span class="hl opt">*</span> yvals<span class="hl opt">=</span>dense_y<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_x<span class="hl opt">-&gt;</span><span class="hl kwd">IsHomogeneous</span><span class="hl opt">()) {</span>
+        Number val <span class="hl opt">=</span> alpha <span class="hl opt">*</span> dense_x<span class="hl opt">-&gt;</span><span class="hl kwd">Scalar</span><span class="hl opt">();</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>val <span class="hl opt">!=</span> <span class="hl num">0</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            yvals<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]] +=</span> val<span class="hl opt">;</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwb">const</span> Number<span class="hl opt">*</span> xvals<span class="hl opt">=</span>dense_x<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>alpha <span class="hl opt">==</span> <span class="hl num">1</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            yvals<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]] +=</span> xvals<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else if</span> <span class="hl opt">(</span>alpha <span class="hl opt">== -</span><span class="hl num">1</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            yvals<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]] -=</span> xvals<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else</span> <span class="hl opt">{</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            yvals<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]] +=</span> alpha <span class="hl opt">*</span> xvals<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">void</span> ExpansionMatrix<span class="hl opt">::</span><span class="hl kwd">TransMultVectorImpl</span><span class="hl opt">(</span>Number alpha<span class="hl opt">,</span> <span class="hl kwb">const</span> Vector <span class="hl opt">&amp;</span>x<span class="hl opt">,</span>
+      Number beta<span class="hl opt">,</span> Vector <span class="hl opt">&amp;</span>y<span class="hl opt">)</span> <span class="hl kwb">const</span>
+  <span class="hl opt">{</span>
+    <span class="hl slc">//  A few sanity checks</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NCols</span><span class="hl opt">()==</span>y<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NRows</span><span class="hl opt">()==</span>x<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+
+    <span class="hl slc">// Take care of the y part of the addition</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span> beta<span class="hl opt">!=</span><span class="hl num">0.0</span> <span class="hl opt">) {</span>
+      y<span class="hl opt">.</span><span class="hl kwd">Scal</span><span class="hl opt">(</span>beta<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      y<span class="hl opt">.</span><span class="hl kwd">Set</span><span class="hl opt">(</span><span class="hl num">0.0</span><span class="hl opt">);</span>  <span class="hl slc">// In case y hasn't been initialized yet</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl slc">// See if we can understand the data</span>
+    <span class="hl kwb">const</span> DenseVector<span class="hl opt">*</span> dense_x <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>x<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>x<span class="hl opt">));</span>
+    DenseVector<span class="hl opt">*</span> dense_y <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>y<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>y<span class="hl opt">));</span>
+
+    <span class="hl kwb">const</span> Index<span class="hl opt">*</span> exp_pos <span class="hl opt">=</span> <span class="hl kwd">ExpandedPosIndices</span><span class="hl opt">();</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_x <span class="hl opt">&amp;&amp;</span> dense_y<span class="hl opt">) {</span>
+      Number<span class="hl opt">*</span> yvals<span class="hl opt">=</span>dense_y<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_x<span class="hl opt">-&gt;</span><span class="hl kwd">IsHomogeneous</span><span class="hl opt">()) {</span>
+        Number val <span class="hl opt">=</span> alpha <span class="hl opt">*</span> dense_x<span class="hl opt">-&gt;</span><span class="hl kwd">Scalar</span><span class="hl opt">();</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>val <span class="hl opt">!=</span> <span class="hl num">0</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            yvals<span class="hl opt">[</span>i<span class="hl opt">] +=</span> val<span class="hl opt">;</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwb">const</span> Number<span class="hl opt">*</span> xvals<span class="hl opt">=</span>dense_x<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>alpha <span class="hl opt">==</span> <span class="hl num">1</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            yvals<span class="hl opt">[</span>i<span class="hl opt">] +=</span> xvals<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else if</span> <span class="hl opt">(</span>alpha <span class="hl opt">== -</span><span class="hl num">1</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            yvals<span class="hl opt">[</span>i<span class="hl opt">] -=</span> xvals<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else</span> <span class="hl opt">{</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            yvals<span class="hl opt">[</span>i<span class="hl opt">] +=</span> alpha <span class="hl opt">*</span> xvals<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl slc">// Specialized method (overloaded from IpMatrix)</span>
+  <span class="hl kwb">void</span> ExpansionMatrix<span class="hl opt">::</span><span class="hl kwd">AddMSinvZImpl</span><span class="hl opt">(</span>Number alpha<span class="hl opt">,</span> <span class="hl kwb">const</span> Vector<span class="hl opt">&amp;</span> S<span class="hl opt">,</span>
+                                      <span class="hl kwb">const</span> Vector<span class="hl opt">&amp;</span> Z<span class="hl opt">,</span> Vector<span class="hl opt">&amp;</span> X<span class="hl opt">)</span> <span class="hl kwb">const</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NCols</span><span class="hl opt">()==</span>S<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NCols</span><span class="hl opt">()==</span>Z<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NRows</span><span class="hl opt">()==</span>X<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+
+    <span class="hl kwb">const</span> DenseVector<span class="hl opt">*</span> dense_S <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>S<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>S<span class="hl opt">));</span>
+    <span class="hl kwb">const</span> DenseVector<span class="hl opt">*</span> dense_Z <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>Z<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>Z<span class="hl opt">));</span>
+    DenseVector<span class="hl opt">*</span> dense_X <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>X<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>X<span class="hl opt">));</span>
+
+    <span class="hl slc">// if vector S is homogeneous type, call the default implementation</span>
+    <span class="hl slc">// ToDo: find out how often the default implementation is called and</span>
+    <span class="hl slc">// if we should implement specialized method for the homogenenous</span>
+    <span class="hl slc">// case</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_S<span class="hl opt">-&gt;</span><span class="hl kwd">IsHomogeneous</span><span class="hl opt">()) {</span>
+      <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">false</span> <span class="hl opt">&amp;&amp;</span> <span class="hl str">&quot;dense_S is homogeneous - implement specialized option?&quot;</span><span class="hl opt">);</span>
+      Matrix<span class="hl opt">::</span><span class="hl kwd">AddMSinvZImpl</span><span class="hl opt">(</span>alpha<span class="hl opt">,</span> S<span class="hl opt">,</span> Z<span class="hl opt">,</span> X<span class="hl opt">);</span>
+      <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwb">const</span> Index<span class="hl opt">*</span> exp_pos <span class="hl opt">=</span> <span class="hl kwd">ExpandedPosIndices</span><span class="hl opt">();</span>
+    <span class="hl kwb">const</span> Number<span class="hl opt">*</span> vals_S <span class="hl opt">=</span> dense_S<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+    Number<span class="hl opt">*</span> vals_X <span class="hl opt">=</span> dense_X<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_Z<span class="hl opt">-&gt;</span><span class="hl kwd">IsHomogeneous</span><span class="hl opt">()) {</span>
+      Number val <span class="hl opt">=</span> alpha<span class="hl opt">*</span>dense_Z<span class="hl opt">-&gt;</span><span class="hl kwd">Scalar</span><span class="hl opt">();</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>val <span class="hl opt">!=</span> <span class="hl num">0</span><span class="hl opt">.) {</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+          vals_X<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]] +=</span> val<span class="hl opt">/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      <span class="hl kwb">const</span> Number<span class="hl opt">*</span> vals_Z <span class="hl opt">=</span> dense_Z<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>alpha<span class="hl opt">==</span><span class="hl num">1</span><span class="hl opt">.) {</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+          vals_X<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]] +=</span> vals_Z<span class="hl opt">[</span>i<span class="hl opt">]/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else if</span> <span class="hl opt">(</span>alpha<span class="hl opt">==-</span><span class="hl num">1</span><span class="hl opt">.) {</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+          vals_X<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]] -=</span> vals_Z<span class="hl opt">[</span>i<span class="hl opt">]/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+          vals_X<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]] +=</span> alpha<span class="hl opt">*</span>vals_Z<span class="hl opt">[</span>i<span class="hl opt">]/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">void</span> ExpansionMatrix<span class="hl opt">::</span><span class="hl kwd">SinvBlrmZMTdBrImpl</span><span class="hl opt">(</span>Number alpha<span class="hl opt">,</span> <span class="hl kwb">const</span> Vector<span class="hl opt">&amp;</span> S<span class="hl opt">,</span>
+      <span class="hl kwb">const</span> Vector<span class="hl opt">&amp;</span> R<span class="hl opt">,</span> <span class="hl kwb">const</span> Vector<span class="hl opt">&amp;</span> Z<span class="hl opt">,</span>
+      <span class="hl kwb">const</span> Vector<span class="hl opt">&amp;</span> D<span class="hl opt">,</span> Vector<span class="hl opt">&amp;</span> X<span class="hl opt">)</span> <span class="hl kwb">const</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwd">DBG_START_METH</span><span class="hl opt">(</span><span class="hl str">&quot;ExpansionMatrix::SinvBlrmZMTdBrImpl&quot;</span><span class="hl opt">,</span>
+                   dbg_verbosity<span class="hl opt">);</span>
+
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NCols</span><span class="hl opt">()==</span>S<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NCols</span><span class="hl opt">()==</span>R<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NCols</span><span class="hl opt">()==</span>Z<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NRows</span><span class="hl opt">()==</span>D<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwd">NCols</span><span class="hl opt">()==</span>X<span class="hl opt">.</span><span class="hl kwd">Dim</span><span class="hl opt">());</span>
+
+    <span class="hl kwb">const</span> DenseVector<span class="hl opt">*</span> dense_S <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>S<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>S<span class="hl opt">));</span>
+    <span class="hl kwb">const</span> DenseVector<span class="hl opt">*</span> dense_R <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>R<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>R<span class="hl opt">));</span>
+    <span class="hl kwb">const</span> DenseVector<span class="hl opt">*</span> dense_Z <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>Z<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>Z<span class="hl opt">));</span>
+    <span class="hl kwb">const</span> DenseVector<span class="hl opt">*</span> dense_D <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>D<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span><span class="hl kwb">const</span> DenseVector<span class="hl opt">*&gt;(&amp;</span>D<span class="hl opt">));</span>
+    DenseVector<span class="hl opt">*</span> dense_X <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>X<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>X<span class="hl opt">));</span>
+
+    <span class="hl slc">// if the vectors S or D are of the homogeneous type, revert to the</span>
+    <span class="hl slc">// default implementation</span>
+    <span class="hl slc">// ToDo: find out how often the default implementation is called and</span>
+    <span class="hl slc">// if we should implement specialized method for the homogenenous</span>
+    <span class="hl slc">// case</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_S<span class="hl opt">-&gt;</span><span class="hl kwd">IsHomogeneous</span><span class="hl opt">() ||</span>
+        dense_D<span class="hl opt">-&gt;</span><span class="hl kwd">IsHomogeneous</span><span class="hl opt">()) {</span>
+      <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">false</span> <span class="hl opt">&amp;&amp;</span> <span class="hl str">&quot;dense_S or dense_D is homogeneous - implement specialized option?&quot;</span><span class="hl opt">);</span>
+      Matrix<span class="hl opt">::</span><span class="hl kwd">SinvBlrmZMTdBrImpl</span><span class="hl opt">(</span>alpha<span class="hl opt">,</span> S<span class="hl opt">,</span> R<span class="hl opt">,</span> Z<span class="hl opt">,</span> D<span class="hl opt">,</span> X<span class="hl opt">);</span>
+      <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwb">const</span> Index<span class="hl opt">*</span> exp_pos <span class="hl opt">=</span> <span class="hl kwd">ExpandedPosIndices</span><span class="hl opt">();</span>
+    <span class="hl kwb">const</span> Number<span class="hl opt">*</span> vals_S <span class="hl opt">=</span> dense_S<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+    <span class="hl kwb">const</span> Number<span class="hl opt">*</span> vals_D <span class="hl opt">=</span> dense_D<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+    Number<span class="hl opt">*</span> vals_X <span class="hl opt">=</span> dense_X<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_R<span class="hl opt">-&gt;</span><span class="hl kwd">IsHomogeneous</span><span class="hl opt">()) {</span>
+      Number scalar_R <span class="hl opt">=</span> dense_R<span class="hl opt">-&gt;</span><span class="hl kwd">Scalar</span><span class="hl opt">();</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_Z<span class="hl opt">-&gt;</span><span class="hl kwd">IsHomogeneous</span><span class="hl opt">()) {</span>
+        Number val <span class="hl opt">=</span> alpha<span class="hl opt">*</span>dense_Z<span class="hl opt">-&gt;</span><span class="hl kwd">Scalar</span><span class="hl opt">();</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>val <span class="hl opt">==</span> <span class="hl num">0</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            <span class="hl slc">// ToDo could treat val == 0 extra</span>
+            vals_X<span class="hl opt">[</span>i<span class="hl opt">] = (</span>scalar_R<span class="hl opt">)/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else</span> <span class="hl opt">{</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            <span class="hl slc">// ToDo could treat val == 0 extra</span>
+            vals_X<span class="hl opt">[</span>i<span class="hl opt">] = (</span>scalar_R <span class="hl opt">+</span> val<span class="hl opt">*</span>vals_D<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]])/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwb">const</span> Number<span class="hl opt">*</span> vals_Z <span class="hl opt">=</span> dense_Z<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>alpha<span class="hl opt">==</span><span class="hl num">1</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            vals_X<span class="hl opt">[</span>i<span class="hl opt">] = (</span>scalar_R <span class="hl opt">+</span> vals_Z<span class="hl opt">[</span>i<span class="hl opt">]*</span>vals_D<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]])/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else if</span> <span class="hl opt">(</span>alpha<span class="hl opt">==-</span><span class="hl num">1</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            vals_X<span class="hl opt">[</span>i<span class="hl opt">] = (</span>scalar_R <span class="hl opt">-</span> vals_Z<span class="hl opt">[</span>i<span class="hl opt">]*</span>vals_D<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]])/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else</span> <span class="hl opt">{</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            vals_X<span class="hl opt">[</span>i<span class="hl opt">] = (</span>scalar_R <span class="hl opt">+</span> alpha<span class="hl opt">*</span>vals_Z<span class="hl opt">[</span>i<span class="hl opt">]*</span>vals_D<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]])/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      <span class="hl kwb">const</span> Number<span class="hl opt">*</span> vals_R <span class="hl opt">=</span> dense_R<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+      <span class="hl kwa">if</span> <span class="hl opt">(</span>dense_Z<span class="hl opt">-&gt;</span><span class="hl kwd">IsHomogeneous</span><span class="hl opt">()) {</span>
+        Number val <span class="hl opt">=</span> alpha<span class="hl opt">*</span>dense_Z<span class="hl opt">-&gt;</span><span class="hl kwd">Scalar</span><span class="hl opt">();</span>
+        <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+          vals_X<span class="hl opt">[</span>i<span class="hl opt">] = (</span>vals_R<span class="hl opt">[</span>i<span class="hl opt">] +</span> val<span class="hl opt">*</span>vals_D<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]])/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+      <span class="hl kwa">else</span> <span class="hl opt">{</span>
+        <span class="hl kwb">const</span> Number<span class="hl opt">*</span> vals_Z <span class="hl opt">=</span> dense_Z<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+        <span class="hl kwa">if</span> <span class="hl opt">(</span>alpha<span class="hl opt">==</span><span class="hl num">1</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            vals_X<span class="hl opt">[</span>i<span class="hl opt">] = (</span>vals_R<span class="hl opt">[</span>i<span class="hl opt">] +</span> vals_Z<span class="hl opt">[</span>i<span class="hl opt">]*</span>vals_D<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]])/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else if</span> <span class="hl opt">(</span>alpha<span class="hl opt">==-</span><span class="hl num">1</span><span class="hl opt">.) {</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            vals_X<span class="hl opt">[</span>i<span class="hl opt">] = (</span>vals_R<span class="hl opt">[</span>i<span class="hl opt">] -</span> vals_Z<span class="hl opt">[</span>i<span class="hl opt">]*</span>vals_D<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]])/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+        <span class="hl kwa">else</span> <span class="hl opt">{</span>
+          <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+            vals_X<span class="hl opt">[</span>i<span class="hl opt">] = (</span>vals_R<span class="hl opt">[</span>i<span class="hl opt">] +</span> alpha<span class="hl opt">*</span>vals_Z<span class="hl opt">[</span>i<span class="hl opt">]*</span>vals_D<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]])/</span>vals_S<span class="hl opt">[</span>i<span class="hl opt">];</span>
+          <span class="hl opt">}</span>
+        <span class="hl opt">}</span>
+      <span class="hl opt">}</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">void</span> ExpansionMatrix<span class="hl opt">::</span><span class="hl kwd">ComputeRowAMaxImpl</span><span class="hl opt">(</span>Vector<span class="hl opt">&amp;</span> rows_norms<span class="hl opt">,</span> <span class="hl kwb">bool</span> init<span class="hl opt">)</span> <span class="hl kwb">const</span>
+  <span class="hl opt">{</span>
+    DenseVector<span class="hl opt">*</span> dense_vec <span class="hl opt">=</span> <span class="hl kwa">static_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>rows_norms<span class="hl opt">);</span>
+    <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span><span class="hl kwa">dynamic_cast</span><span class="hl opt">&lt;</span>DenseVector<span class="hl opt">*&gt;(&amp;</span>rows_norms<span class="hl opt">));</span>
+    Number<span class="hl opt">*</span> vec_vals<span class="hl opt">=</span>dense_vec<span class="hl opt">-&gt;</span><span class="hl kwd">Values</span><span class="hl opt">();</span>
+
+    <span class="hl kwb">const</span> Index<span class="hl opt">*</span> exp_pos <span class="hl opt">=</span> <span class="hl kwd">ExpandedPosIndices</span><span class="hl opt">();</span>
+
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+      vec_vals<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]] =</span> <span class="hl kwd">Max</span><span class="hl opt">(</span>vec_vals<span class="hl opt">[</span>exp_pos<span class="hl opt">[</span>i<span class="hl opt">]],</span> <span class="hl num">1</span><span class="hl opt">.);</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">void</span> ExpansionMatrix<span class="hl opt">::</span><span class="hl kwd">ComputeColAMaxImpl</span><span class="hl opt">(</span>Vector<span class="hl opt">&amp;</span> cols_norms<span class="hl opt">,</span> <span class="hl kwb">bool</span> init<span class="hl opt">)</span> <span class="hl kwb">const</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span>init<span class="hl opt">) {</span>
+      cols_norms<span class="hl opt">.</span><span class="hl kwd">Set</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">.);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">else</span> <span class="hl opt">{</span>
+      SmartPtr<span class="hl opt">&lt;</span>Vector<span class="hl opt">&gt;</span> v <span class="hl opt">=</span> cols_norms<span class="hl opt">.</span><span class="hl kwd">MakeNew</span><span class="hl opt">();</span>
+      v<span class="hl opt">-&gt;</span><span class="hl kwd">Set</span><span class="hl opt">(</span><span class="hl num">1</span><span class="hl opt">.);</span>
+      cols_norms<span class="hl opt">.</span><span class="hl kwd">ElementWiseMax</span><span class="hl opt">(*</span>v<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  <span class="hl kwb">void</span> ExpansionMatrix<span class="hl opt">::</span><span class="hl kwd">PrintImplOffset</span><span class="hl opt">(</span><span class="hl kwb">const</span> Journalist<span class="hl opt">&amp;</span> jnlst<span class="hl opt">,</span>
+                                        EJournalLevel level<span class="hl opt">,</span>
+                                        EJournalCategory category<span class="hl opt">,</span>
+                                        <span class="hl kwb">const</span> std<span class="hl opt">::</span>string<span class="hl opt">&amp;</span> name<span class="hl opt">,</span>
+                                        Index indent<span class="hl opt">,</span>
+                                        <span class="hl kwb">const</span> std<span class="hl opt">::</span>string<span class="hl opt">&amp;</span> prefix<span class="hl opt">,</span>
+                                        Index row_offset<span class="hl opt">,</span>
+                                        Index col_offset<span class="hl opt">)</span> <span class="hl kwb">const</span>
+  <span class="hl opt">{</span>
+    jnlst<span class="hl opt">.</span><span class="hl kwd">Printf</span><span class="hl opt">(</span>level<span class="hl opt">,</span> category<span class="hl opt">,</span> <span class="hl str">&quot;</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+    jnlst<span class="hl opt">.</span><span class="hl kwd">PrintfIndented</span><span class="hl opt">(</span>level<span class="hl opt">,</span> category<span class="hl opt">,</span> indent<span class="hl opt">,</span>
+                         <span class="hl str">&quot;%sExpansionMatrix</span> <span class="hl esc">\&quot;</span><span class="hl str">%s</span><span class="hl esc">\&quot;</span> <span class="hl str">with %d rows and %d columns:</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+                         prefix<span class="hl opt">.</span><span class="hl kwd">c_str</span><span class="hl opt">(),</span> name<span class="hl opt">.</span><span class="hl kwd">c_str</span><span class="hl opt">(),</span> <span class="hl kwd">NRows</span><span class="hl opt">(),</span> <span class="hl kwd">NCols</span><span class="hl opt">());</span>
+
+    <span class="hl kwb">const</span> Index<span class="hl opt">*</span> exp_pos <span class="hl opt">=</span> <span class="hl kwd">ExpandedPosIndices</span><span class="hl opt">();</span>
+
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+      jnlst<span class="hl opt">.</span><span class="hl kwd">PrintfIndented</span><span class="hl opt">(</span>level<span class="hl opt">,</span> category<span class="hl opt">,</span> indent<span class="hl opt">,</span>
+                           <span class="hl str">&quot;%s%s[%5d,%5d]=%23.16e  (%d)</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">,</span>
+                           prefix<span class="hl opt">.</span><span class="hl kwd">c_str</span><span class="hl opt">(),</span> name<span class="hl opt">.</span><span class="hl kwd">c_str</span><span class="hl opt">(),</span> exp_pos<span class="hl opt">[</span>i<span class="hl opt">]+</span>row_offset<span class="hl opt">,</span>
+                           i<span class="hl opt">+</span>col_offset<span class="hl opt">,</span> <span class="hl num">1</span><span class="hl opt">.,</span> i<span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+  ExpansionMatrixSpace<span class="hl opt">::</span><span class="hl kwd">ExpansionMatrixSpace</span><span class="hl opt">(</span>Index NLargeVec<span class="hl opt">,</span>
+      Index NSmallVec<span class="hl opt">,</span>
+      <span class="hl kwb">const</span> Index <span class="hl opt">*</span>ExpPos<span class="hl opt">,</span>
+      <span class="hl kwb">const int</span> offset <span class="hl com">/*= 0*/</span><span class="hl opt">)</span>
+      <span class="hl opt">:</span>
+      <span class="hl kwd">MatrixSpace</span><span class="hl opt">(</span>NLargeVec<span class="hl opt">,</span> NSmallVec<span class="hl opt">),</span>
+      <span class="hl kwd">expanded_pos_</span><span class="hl opt">(</span>NULL<span class="hl opt">),</span>
+      <span class="hl kwd">compressed_pos_</span><span class="hl opt">(</span>NULL<span class="hl opt">)</span>
+  <span class="hl opt">{</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">NCols</span><span class="hl opt">()&gt;</span><span class="hl num">0</span><span class="hl opt">) {</span>
+      expanded_pos_  <span class="hl opt">=</span> <span class="hl kwa">new</span> Index<span class="hl opt">[</span><span class="hl kwd">NCols</span><span class="hl opt">()];</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">if</span> <span class="hl opt">(</span><span class="hl kwd">NRows</span><span class="hl opt">()&gt;</span><span class="hl num">0</span><span class="hl opt">) {</span>
+      compressed_pos_ <span class="hl opt">=</span> <span class="hl kwa">new</span> Index<span class="hl opt">[</span><span class="hl kwd">NRows</span><span class="hl opt">()];</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>Index j<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> j<span class="hl opt">&lt;</span><span class="hl kwd">NRows</span><span class="hl opt">();</span> j<span class="hl opt">++) {</span>
+      compressed_pos_<span class="hl opt">[</span>j<span class="hl opt">] = -</span><span class="hl num">1</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwa">for</span> <span class="hl opt">(</span>Index i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">;</span> i<span class="hl opt">&lt;</span><span class="hl kwd">NCols</span><span class="hl opt">();</span> i<span class="hl opt">++) {</span>
+      <span class="hl slc">//ToDo decide for offset</span>
+      <span class="hl kwd">DBG_ASSERT</span><span class="hl opt">(</span>ExpPos<span class="hl opt">[</span>i<span class="hl opt">]-</span>offset<span class="hl opt">&lt;</span><span class="hl kwd">NRows</span><span class="hl opt">() &amp;&amp;</span> ExpPos<span class="hl opt">[</span>i<span class="hl opt">]-</span>offset<span class="hl opt">&gt;=</span><span class="hl num">0</span><span class="hl opt">);</span>
+      expanded_pos_<span class="hl opt">[</span>i<span class="hl opt">]=</span>ExpPos<span class="hl opt">[</span>i<span class="hl opt">]-</span>offset<span class="hl opt">;</span>
+      compressed_pos_<span class="hl opt">[</span>ExpPos<span class="hl opt">[</span>i<span class="hl opt">]-</span>offset<span class="hl opt">] =</span> i<span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+  <span class="hl opt">}</span>
+
+<span class="hl opt">}</span> <span class="hl slc">// namespace Ipopt</span>
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->

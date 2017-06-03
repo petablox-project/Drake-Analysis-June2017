@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="ISO-8859-1">
+<title>../drake/externals/libbot/bot2-lcm-utils/src/tunnel/introspect.c</title>
+<link rel="stylesheet" type="text/css" href="highlight.css">
+</head>
+<body class="hl">
+<pre class="hl"><span class="hl ppc">#include &lt;stdint.h&gt;</span>
+<span class="hl ppc">#include &lt;string.h&gt;</span>
+<span class="hl ppc">#include &lt;stdlib.h&gt;</span>
+<span class="hl ppc">#include &lt;sys/types.h&gt;</span>
+<span class="hl ppc">#include &lt;sys/socket.h&gt;</span>
+<span class="hl ppc">#include &lt;netinet/in.h&gt;</span>
+
+<span class="hl ppc">#include &lt;glib.h&gt;</span>
+
+<span class="hl ppc">#include</span> <span class="hl pps">&quot;introspect.h&quot;</span><span class="hl ppc"></span>
+
+<span class="hl kwb">struct</span> _introspect_t
+<span class="hl opt">{</span>
+    <span class="hl kwb">int</span> ready<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> waiting_for_packet<span class="hl opt">;</span>
+    lcm_t <span class="hl opt">*</span> lcm<span class="hl opt">;</span>
+
+    lcm_subscription_t <span class="hl opt">*</span> subscription<span class="hl opt">;</span>
+    <span class="hl kwb">uint8_t</span> sent_buf<span class="hl opt">[</span><span class="hl num">64</span><span class="hl opt">];</span>
+
+    <span class="hl kwb">uint32_t</span> host<span class="hl opt">;</span>
+    <span class="hl kwb">uint16_t</span> port<span class="hl opt">;</span>
+    <span class="hl kwb">int64_t</span> sig<span class="hl opt">;</span>
+<span class="hl opt">};</span>
+
+<span class="hl slc">// XXX these structs must be identical to the ones defined in lcm/lcm_udp.c</span>
+<span class="hl kwb">struct</span> _lcm2_header_short <span class="hl opt">{</span>
+    <span class="hl kwb">uint32_t</span> magic<span class="hl opt">;</span>
+    <span class="hl kwb">uint32_t</span> msg_seqno<span class="hl opt">;</span>
+<span class="hl opt">};</span>
+
+<span class="hl kwc">typedef</span> <span class="hl kwb">struct</span> _lcm_buf <span class="hl opt">{</span>
+    <span class="hl kwb">char</span>  channel_name<span class="hl opt">[</span>LCM_MAX_CHANNEL_NAME_LENGTH<span class="hl opt">+</span><span class="hl num">1</span><span class="hl opt">];</span>
+    <span class="hl kwb">int</span>   channel_size<span class="hl opt">;</span>      <span class="hl slc">// length of channel name</span>
+
+    <span class="hl kwb">int64_t</span> recv_utime<span class="hl opt">;</span>      <span class="hl slc">// timestamp of first datagram receipt</span>
+    <span class="hl kwb">char</span> <span class="hl opt">*</span>buf<span class="hl opt">;</span>               <span class="hl slc">// pointer to beginning of message.  This includes</span>
+                             <span class="hl slc">// the header for unfragmented messages, and does</span>
+                             <span class="hl slc">// not include the header for fragmented messages.</span>
+
+    <span class="hl kwb">int</span>   data_offset<span class="hl opt">;</span>       <span class="hl slc">// offset to payload</span>
+    <span class="hl kwb">int</span>   data_size<span class="hl opt">;</span>         <span class="hl slc">// size of payload</span>
+    <span class="hl kwb">int</span>   buf_from_ringbuf<span class="hl opt">;</span>  <span class="hl slc">// 1 if the data at buf is managed by the</span>
+                             <span class="hl slc">// ringbuffer, 0 if it's from malloc</span>
+
+    <span class="hl kwb">int</span>   packet_size<span class="hl opt">;</span>       <span class="hl slc">// total bytes received</span>
+    <span class="hl kwb">int</span>   buf_size<span class="hl opt">;</span>          <span class="hl slc">// bytes allocated</span>
+
+    <span class="hl kwb">struct</span> sockaddr from<span class="hl opt">;</span>    <span class="hl slc">// sender</span>
+    socklen_t fromlen<span class="hl opt">;</span>
+    <span class="hl kwb">struct</span> _lcm_buf <span class="hl opt">*</span>next<span class="hl opt">;</span>
+<span class="hl opt">}</span> lcm_buf_t<span class="hl opt">;</span>
+
+<span class="hl kwb">static</span> <span class="hl kwc">inline</span> <span class="hl kwb">int64_t</span>
+<span class="hl kwd">packet_sig</span><span class="hl opt">(</span><span class="hl kwb">const char</span> <span class="hl opt">*</span>channel<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    lcm_buf_t <span class="hl opt">*</span>lbuf <span class="hl opt">= (</span>lcm_buf_t<span class="hl opt">*)</span> channel<span class="hl opt">;</span>
+    <span class="hl kwb">struct</span> sockaddr_in <span class="hl opt">*</span> sin <span class="hl opt">= (</span><span class="hl kwb">struct</span> sockaddr_in<span class="hl opt">*) &amp;</span>lbuf<span class="hl opt">-&gt;</span>from<span class="hl opt">;</span>
+    <span class="hl kwa">return</span> <span class="hl opt">(((</span><span class="hl kwb">int64_t</span><span class="hl opt">)</span>sin<span class="hl opt">-&gt;</span>sin_addr<span class="hl opt">.</span>s_addr<span class="hl opt">) &lt;&lt;</span> <span class="hl num">32</span><span class="hl opt">) |</span> sin<span class="hl opt">-&gt;</span>sin_port<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">static void</span>
+<span class="hl kwd">on_lcm_tunnel_introspect</span><span class="hl opt">(</span><span class="hl kwb">const</span> lcm_recv_buf_t <span class="hl opt">*</span>rbuf<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>channel<span class="hl opt">,</span>
+        <span class="hl kwb">void</span> <span class="hl opt">*</span>user_data<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    introspect_t <span class="hl opt">*</span>self <span class="hl opt">= (</span>introspect_t<span class="hl opt">*)</span>user_data<span class="hl opt">;</span>
+    <span class="hl kwa">if</span><span class="hl opt">(!</span>self<span class="hl opt">-&gt;</span>waiting_for_packet<span class="hl opt">)</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl kwb">int</span> n <span class="hl opt">=</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>sent_buf<span class="hl opt">);</span>
+
+    <span class="hl slc">// sanity check</span>
+    <span class="hl kwb">const</span> lcm_buf_t <span class="hl opt">*</span>lbuf <span class="hl opt">= (</span><span class="hl kwb">const</span> lcm_buf_t<span class="hl opt">*)</span> channel<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> doff <span class="hl opt">=</span> lbuf<span class="hl opt">-&gt;</span>data_offset<span class="hl opt">;</span>
+    <span class="hl kwb">int</span> data_offset_okay <span class="hl opt">= (</span>doff <span class="hl opt">==</span> <span class="hl num">0</span> <span class="hl opt">&amp;&amp; !</span>lbuf<span class="hl opt">-&gt;</span>buf_from_ringbuf<span class="hl opt">) ||</span>
+        <span class="hl opt">(</span>doff <span class="hl opt">==</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span><span class="hl kwb">struct</span> _lcm2_header_short<span class="hl opt">) +</span> <span class="hl kwd">strlen</span><span class="hl opt">(</span>channel<span class="hl opt">) +</span> <span class="hl num">1</span> <span class="hl opt">&amp;&amp;</span>
+         lbuf<span class="hl opt">-&gt;</span>buf_from_ringbuf<span class="hl opt">);</span>
+    <span class="hl kwa">if</span><span class="hl opt">(!</span> data_offset_okay <span class="hl opt">||</span> 
+       rbuf<span class="hl opt">-&gt;</span>data <span class="hl opt">!=</span> lbuf<span class="hl opt">-&gt;</span>buf <span class="hl opt">+</span> doff <span class="hl opt">||</span>
+       lbuf<span class="hl opt">-&gt;</span>recv_utime <span class="hl opt">!=</span> rbuf<span class="hl opt">-&gt;</span>recv_utime <span class="hl opt">||</span>
+       rbuf<span class="hl opt">-&gt;</span>data_size <span class="hl opt">!=</span> lbuf<span class="hl opt">-&gt;</span>data_size<span class="hl opt">) {</span>
+        <span class="hl kwd">fprintf</span><span class="hl opt">(</span>stderr<span class="hl opt">,</span> 
+                <span class="hl str">&quot;Received introspection packet, but failed validation check</span><span class="hl esc">\n</span><span class="hl str">&quot;</span>
+                <span class="hl str">&quot;This does not appear to be a udpm LCM network..</span><span class="hl esc">\n</span><span class="hl str">&quot;</span><span class="hl opt">);</span>
+        self<span class="hl opt">-&gt;</span>ready <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+        <span class="hl kwa">return</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+
+    <span class="hl kwa">if</span><span class="hl opt">(</span>rbuf<span class="hl opt">-&gt;</span>data_size <span class="hl opt">==</span> n <span class="hl opt">&amp;&amp;</span> <span class="hl num">0</span> <span class="hl opt">==</span> <span class="hl kwd">memcmp</span><span class="hl opt">(</span>rbuf<span class="hl opt">-&gt;</span>data<span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>sent_buf<span class="hl opt">,</span> n<span class="hl opt">)) {</span>
+        self<span class="hl opt">-&gt;</span>ready <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+
+        self<span class="hl opt">-&gt;</span>sig <span class="hl opt">=</span> <span class="hl kwd">packet_sig</span><span class="hl opt">(</span>channel<span class="hl opt">);</span>
+        self<span class="hl opt">-&gt;</span>host <span class="hl opt">=</span> self<span class="hl opt">-&gt;</span>sig <span class="hl opt">&gt;&gt;</span> <span class="hl num">32</span><span class="hl opt">;</span>
+        self<span class="hl opt">-&gt;</span>port <span class="hl opt">=</span> self<span class="hl opt">-&gt;</span>sig <span class="hl opt">&amp;</span> <span class="hl num">0xFFFF</span><span class="hl opt">;</span>
+        self<span class="hl opt">-&gt;</span>waiting_for_packet <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    <span class="hl opt">}</span>
+<span class="hl opt">}</span>
+
+introspect_t <span class="hl opt">*</span>
+<span class="hl kwd">introspect_new</span><span class="hl opt">(</span>lcm_t <span class="hl opt">*</span> lcm<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    introspect_t <span class="hl opt">*</span> self <span class="hl opt">=</span> <span class="hl kwd">malloc</span><span class="hl opt">(</span><span class="hl kwa">sizeof</span><span class="hl opt">(</span>introspect_t<span class="hl opt">));</span>
+    <span class="hl kwd">memset</span><span class="hl opt">(</span>self<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl kwa">sizeof</span><span class="hl opt">(</span>introspect_t<span class="hl opt">));</span>
+
+    self<span class="hl opt">-&gt;</span>ready <span class="hl opt">=</span> <span class="hl num">0</span><span class="hl opt">;</span>
+    self<span class="hl opt">-&gt;</span>lcm <span class="hl opt">=</span> lcm<span class="hl opt">;</span>
+
+    self<span class="hl opt">-&gt;</span>subscription <span class="hl opt">=</span> <span class="hl kwd">lcm_subscribe</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>lcm<span class="hl opt">,</span> <span class="hl str">&quot;LCM_TUNNEL_INTROSPECT&quot;</span><span class="hl opt">,</span>
+            on_lcm_tunnel_introspect<span class="hl opt">,</span> self<span class="hl opt">);</span>
+
+    <span class="hl kwd">introspect_send_introspection_packet</span><span class="hl opt">(</span>self<span class="hl opt">);</span>
+    <span class="hl kwa">return</span> self<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span> 
+<span class="hl kwd">introspect_send_introspection_packet</span><span class="hl opt">(</span>introspect_t<span class="hl opt">*</span> self<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl slc">// generate a random bitstring</span>
+    GRand <span class="hl opt">*</span> rng <span class="hl opt">=</span> <span class="hl kwd">g_rand_new</span><span class="hl opt">();</span>
+    <span class="hl kwa">for</span><span class="hl opt">(</span><span class="hl kwb">int</span> i<span class="hl opt">=</span><span class="hl num">0</span><span class="hl opt">,</span> n<span class="hl opt">=</span><span class="hl kwa">sizeof</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>sent_buf<span class="hl opt">);</span> i<span class="hl opt">&lt;</span>n<span class="hl opt">;</span> i<span class="hl opt">++) {</span>
+        self<span class="hl opt">-&gt;</span>sent_buf<span class="hl opt">[</span>i<span class="hl opt">] =</span> <span class="hl kwd">g_rand_int_range</span><span class="hl opt">(</span>rng<span class="hl opt">,</span> <span class="hl num">0</span><span class="hl opt">,</span> <span class="hl num">256</span><span class="hl opt">);</span>
+    <span class="hl opt">}</span>
+    <span class="hl kwd">g_rand_free</span><span class="hl opt">(</span>rng<span class="hl opt">);</span>
+
+    <span class="hl slc">// send the bitstring over LCM</span>
+    <span class="hl kwd">lcm_publish</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>lcm<span class="hl opt">,</span> <span class="hl str">&quot;LCM_TUNNEL_INTROSPECT&quot;</span><span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>sent_buf<span class="hl opt">,</span>
+            <span class="hl kwa">sizeof</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>sent_buf<span class="hl opt">));</span>
+    self<span class="hl opt">-&gt;</span>waiting_for_packet <span class="hl opt">=</span> <span class="hl num">1</span><span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">void</span>
+<span class="hl kwd">introspect_destroy</span><span class="hl opt">(</span>introspect_t <span class="hl opt">*</span>self<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwd">lcm_unsubscribe</span><span class="hl opt">(</span>self<span class="hl opt">-&gt;</span>lcm<span class="hl opt">,</span> self<span class="hl opt">-&gt;</span>subscription<span class="hl opt">);</span>
+    self<span class="hl opt">-&gt;</span>subscription <span class="hl opt">=</span> NULL<span class="hl opt">;</span>
+    <span class="hl kwd">free</span><span class="hl opt">(</span>self<span class="hl opt">);</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span>
+<span class="hl kwd">introspect_is_message_from_self</span><span class="hl opt">(</span>introspect_t <span class="hl opt">*</span> self<span class="hl opt">,</span>
+        <span class="hl kwb">const</span> lcm_recv_buf_t <span class="hl opt">*</span> rbuf<span class="hl opt">,</span> <span class="hl kwb">const char</span> <span class="hl opt">*</span>channel<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">return</span> <span class="hl kwd">packet_sig</span><span class="hl opt">(</span>channel<span class="hl opt">) ==</span> self<span class="hl opt">-&gt;</span>sig<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+
+<span class="hl kwb">int</span>
+<span class="hl kwd">introspect_is_ready</span><span class="hl opt">(</span><span class="hl kwb">const</span> introspect_t <span class="hl opt">*</span> self<span class="hl opt">)</span>
+<span class="hl opt">{</span>
+    <span class="hl kwa">return</span> self<span class="hl opt">-&gt;</span>ready<span class="hl opt">;</span>
+<span class="hl opt">}</span>
+</pre>
+</body>
+</html>
+<!--HTML generated by highlight 3.27, http://www.andre-simon.de/-->
