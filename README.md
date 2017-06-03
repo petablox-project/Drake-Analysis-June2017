@@ -15,7 +15,7 @@ All of the above tools except Coverity are freely available.  Coverity provides 
 
 
 
-Checker Analytics
+### Checker Analytics
 
 <table>
   <tr> 
@@ -80,10 +80,10 @@ Checker Analytics
 </table>
 
 
-Analysis Results
+### Analysis Results
 
 Our analysis of potential safety/security issues discovered in Drake by the tools is available in files under directory [analysis_results](analysis_results).
 
-Detailed Output
+### Detailed Output
 
 The raw output of running the tools on Drake is available in folders under directory [raw_logs](raw_logs).
