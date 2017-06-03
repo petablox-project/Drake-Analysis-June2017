@@ -2,6 +2,34 @@
 
 Petablox consists of six checkers for detecting API misuses in C/C++ programs: return value checker, argument checker, causality checker, condition checker, integer overflow checker and format string checker.  We ran all checkers except for the argument checker on Drake.  The checkers are fully automatic: they do not require specifying correct API usages, or even which functions constitute an API. They automatically mine semantic patterns of API usage across a large codebase like Drake, perform statistical analysis of these patterns, and report infrequent patterns as potential API misuses.
 
+The number of reports produced by each checker is as follows:
+<table>
+  <tr>
+    <td> return value checker </td>
+    <td> 71 </td>    
+  </tr>
+
+  <tr>
+    <td> causality checker </td>
+    <td> 248 </td>    
+  </tr>
+
+  <tr>
+    <td> condition checker </td>
+    <td> 3237 </td>    
+  </tr>
+
+  <tr>
+    <td> integer overflow checker </td>
+    <td> 3 </td>    
+  </tr>
+
+  <tr>
+    <td> format string checker </td>
+    <td> 23 </td>    
+  </tr>
+
+</table>
 
 ### Return Value Checker
 
