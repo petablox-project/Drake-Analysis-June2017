@@ -18,7 +18,7 @@ We present the results of only Petablox and FB Infer.  Kint reported problems co
 <ul>
 <li>Petablox and FB Infer were able to run successfully on 2.1M lines of source code (1.97M lines of Drake externals plus 138K lines of Drake core).  This attests to the suitability of these tools for analyzing large and complex autonomous software systems.</li>
 
-<li>Petablox found 2 buffer underrun bugs and 9 null dereference bugs, and FB Infer found 138 potential null dereference bugs. Among these, three representative alarms are as follows. 
+<li>Petablox found 1 performance bug, 2 buffer underrun bugs and 9 null dereference bugs, and FB Infer found 138 potential null dereference bugs. Among these, three representative alarms are as follows. 
 <table>
   <tr> 
     <td> Link to details </td> 
@@ -38,6 +38,11 @@ We present the results of only Petablox and FB Infer.  Kint reported problems co
   <tr> 
     <td> <a href="analysis_results/Petablox.md#alarm-2-missing--1-check-externalsipoptthirdpartymetismetis-40libsfmc352">Buffer Underrun in externals/ipopt</a> </td> 
     <td> An integer element is retrieved from a priority queue and used as index of a buffer. If the queue is empty, the index can be -1.</td> 
+  </tr>
+  
+  <tr> 
+    <td> <a href="analysis_results/Petablox.md#alarm-3-causality-between-stdmove-and-set_parent-drakemultibodyparserssdf_parsercc657">PERF in drake/multibody</a> </td> 
+    <td> The C++ idiom "move" to avoid unnecessary copies is not used at a point whereas it is almost always used throughout the code. </td> 
   </tr>
     
 </table>
