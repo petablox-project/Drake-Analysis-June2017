@@ -42,8 +42,6 @@ We present the results of only Petablox and FB Infer.  Kint reported problems co
     
 </table>
 </li>
-
-<li>Future work in suppressing false alarms by synthesizing rules</li>
 </ul>
 
 ### Checker Analytics
