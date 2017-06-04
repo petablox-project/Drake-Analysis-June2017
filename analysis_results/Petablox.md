@@ -257,7 +257,6 @@ The following table shows a few samples.
     <td> 
         <a href="https://github.com/RobotLocomotion/drake/blob/master/drake/solvers/moby_lcp_solver.cc#L728"> drake/solvers/moby_lcp_solver.cc:728  </a>
     </td>
-
     <td>  Before calling `std::advance()`, should check if the iterator is `end()` </td>    
   </tr>
 
@@ -265,7 +264,6 @@ The following table shows a few samples.
     <td> 
       <a href="https://github.com/RobotLocomotion/drake/blob/master/drake/systems/estimators/kalman_filter.cc#L43"> drake/systems/estimators/kalman_filter.cc:43 </a>
     </td>
-    
     <td> 
       When the assertion does not hold, error handling function calls like `failure_message`, `Printo`, `UniversalPrint` should be called.
     </td>
@@ -275,7 +273,6 @@ The following table shows a few samples.
     <td> 
       <a href="https://github.com/RobotLocomotion/drake/blob/master/drake/systems/sensors/accelerometer.cc#L68"> drake/systems/sensors/accelerometer.cc:68 </a>
     </td>
-
     <td> 
       `Get_output_port` should be called before/after `Connect`
     </td>    
