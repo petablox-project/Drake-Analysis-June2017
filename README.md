@@ -11,12 +11,12 @@ We ran various checkers in four different automated static analysis tools on the
 3. MIT Kint: Integer overflow checker (http://css.csail.mit.edu/kint)
 4. Coverity: bug pattern checkers (https://scan.coverity.com)
 
-All of the above tools except Coverity are freely available.  Coverity provides a free service for github hosted projects (such as Drake); its results of analyzing Drake will be available in 48 hours.
+We present the results of only Petablox and FB Infer.  Kint reported problems compiling Drake that are easy but tedious to fix.  Coverity is not free to download but it is available as a free service for github hosted projects (such as Drake); its results will be available at a later date.
 
 ### Key Findings
 
 <ul>
-<li>Petablox and FB Infer were able to run successfully on XXX thousand lines of source code in the Drake codebase.  This attests to the suitability of these tools for analyzing large and complex autonomous software systems.</li>
+<li>Petablox and FB Infer were able to run successfully on 2.1M lines of source code (1.97M lines of Drake externals plus 138K lines of Drake core).  This attests to the suitability of these tools for analyzing large and complex autonomous software systems.</li>
 
 <li>FB Infer found 138 potential null dereference bugs and Petablox found 2 buffer underruns and 9 null dereferences. Among them, we describe three representative alarms as follows. 
 <table>
