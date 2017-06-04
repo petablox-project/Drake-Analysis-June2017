@@ -210,3 +210,50 @@ The remaining reports are buggy due to similar reasons, and we briefly summarize
   </tr>
 
 </table>
+
+### Causality Checker
+Causality checker infers causal relations between two APIs. For example, `free()` should be called eventually if `malloc()` is called.
+Because the causality between APIs depends on both the developer's ad-hoc design and domain specific applications. 
+The bug reports are very hard to validate without enough experience of the application and API. 
+
+#### Alarm 3: causality between `std::move()` and `set_parent()` [drake/multibody/parsers/sdf_parser.cc:657](https://github.com/RobotLocomotion/drake/blob/master/drake/multibody/parsers/sdf_parser.cc#L657)
+
+```c++
+void ParseSdfJoint(RigidBodyTree<double>* model, ...) 
+{
+  ...
+656: child->setJoint(move(joint_unique_ptr));
+657: child->set_parent(parent);
+  ...
+}
+```
+
+`C++ Copy & Move` idiom is widely used in passing intermediate values/objects efficiently.
+For example, line-656 uses such idiom. 
+In line-657, causality checker believes that, instead of `child->set_parent(parent)`, it should be `child->set_parent(move(parent))`.
+Because in most cases of Drake code, `move()` is called right before `set_parent()`.
+It is not clear if the developer intentionally avoid this idiom in line-657. 
+Given variable `parent` is a temporary variable used in function `ParseSdfJoint(...)` and it is never used after line-657,
+it is quite reasonable to use this idiom as a way to improvement performance.
+Thus, line-657 is very likely a `performance bug`.
+
+Here, we sort of use a widely used C++ idiom as our `specification` to validate the report. 
+For other reports, we do need a hand from drake developer. 
+
+
+### Condition Checker
+
+Condition checker infers implicit pre/post condition before/after an API call. For example, the parameter `size` passed to `malloc` should not be negative.
+
+### Integer Overflow Checker
+
+Reports from integer overflow checker seems all false positives.
+Petablox has limited support for detection of integer overflow errors. 
+We hope the special tool KINT from MIT could work well on this.
+
+### Format String Checker
+The format string checker is initially inspired by I/O functions in C, e.g., `scanf`, `sscanf` and `fscanf`. 
+Almost all format string bug reports are from `drake/multibody/parsers/xml_util.cc`, which is about XML file parsing thus quite different from formats used in I/O functions in C. 
+So, not surprisingly, all reports are also false positives.
+
+
