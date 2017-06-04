@@ -81,7 +81,7 @@ The pointer `mat_file` last assigned on line 637 could be null and is dereferenc
 
 ### Buffer Overflow Checker
 
-After manual inspection, XX out of 52 buffer-overflow alarms turned out to be viable.
+After manual inspection, all of 52 buffer-overflow alarms turned out to be false.
 
 ### Memory Leak, Use After Free, Resource Leak, and Empty Vector Access Checkers
 
