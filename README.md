@@ -18,7 +18,7 @@ We present the results of only Petablox and FB Infer.  Kint reported problems co
 <ul>
 <li>Petablox and FB Infer were able to run successfully on 2.1M lines of source code (1.97M lines of Drake externals plus 138K lines of Drake core).  This attests to the suitability of these tools for analyzing large and complex autonomous software systems.</li>
 
-<li>FB Infer found 138 potential null dereference bugs and Petablox found 2 buffer underruns and 9 null dereferences. Among them, we describe three representative alarms as follows. 
+<li>Petablox found 2 buffer underrun bugs and 9 null dereference bugs, and FB Infer found 138 potential null dereference bugs. Among these, three representative alarms are as follows. 
 <table>
   <tr> 
     <td> Link to details </td> 
