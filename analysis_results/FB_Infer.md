@@ -15,7 +15,7 @@ The number of reports produced by each checker is as follows:
 
 ### Null Dereference Checker
 
-After manual inspection, 138 out of 420 null dereference alarms turned out to be viable. The checker detected a feasible null dereference as well as missing null checks after allocating memory with malloc, strdup, getenv, and fopen. 
+After manual inspection, 138 out of the 420 null dereference alarms turned out to be viable. The checker detected a feasible null dereference as well as missing null checks after allocating memory with malloc, strdup, getenv, and fopen. 
 
 For brevity, we describe 5 representative alarms as follows.
 
@@ -81,9 +81,9 @@ The pointer `mat_file` last assigned on line 637 could be null and is dereferenc
 
 ### Buffer Overflow Checker
 
-After manual inspection, all of 52 buffer-overflow alarms turned out to be false.
+After manual inspection, all of the 52 buffer-overflow alarms turned out to be false.
 
 ### Memory Leak, Use After Free, Resource Leak, and Empty Vector Access Checkers
 
-After manual inspection, all of 87 alarms turned out to be false. 
+After manual inspection, all of the 87 alarms turned out to be false. 
 
