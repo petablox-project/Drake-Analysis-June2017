@@ -243,9 +243,7 @@ For other reports, we do need a hand from drake developer.
 
 ### Condition Checker
 
-Condition checker infers implicit pre/post condition before/after an API call. For example, the parameter `size` passed to `malloc` should not be negative.
-The reports of condition checker also require application specific knwowledge to investigate. 
-The following table shows a few samples.
+Condition checker infers implicit pre/post condition before/after an API call. For example, the parameter `size` passed to `malloc` should not be negative.  The reports of condition checker also require application specific knowledge to investigate.  The following table shows a few samples.
 
 <table>
   <tr> 
@@ -282,13 +280,10 @@ The following table shows a few samples.
 
 ### Integer Overflow Checker
 
-Reports from integer overflow checker seems all false positives.
-Petablox has limited support for detection of integer overflow errors. 
-We hope the special tool KINT from MIT could work well on this.
+All the reports of the integer overflow checker seem to be false positives.  Petablox has limited support for detection of integer overflow errors. The KINT tool from MIT might do better as it is specialized to detecting integer overflow errors.
 
 ### Format String Checker
-The format string checker is initially inspired by I/O functions in C, e.g., `scanf`, `sscanf` and `fscanf`. 
-Almost all format string bug reports are from `drake/multibody/parsers/xml_util.cc`, which is about XML file parsing thus quite different from formats used in I/O functions in C. 
-So, not surprisingly, all reports are also false positives.
+
+The format string checker was inspired by I/O functions in C, e.g., `scanf`, `sscanf` and `fscanf`.  Almost all format string bug reports are from `drake/multibody/parsers/xml_util.cc`, which concerns XML file parsing and is thus quite different from formats used in I/O functions in C.  So, unsurprisingly, all reports by this checker are also false positives.
 
 
