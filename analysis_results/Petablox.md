@@ -228,18 +228,15 @@ void ParseSdfJoint(RigidBodyTree<double>* model, ...)
 }
 ```
 
-`C++ Copy & Move` idiom is widely used in passing intermediate values/objects efficiently.
-For example, line-656 uses such idiom. 
-In line-657, causality checker believes that, instead of `child->set_parent(parent)`, it should be `child->set_parent(move(parent))`.
-Because in most cases of Drake code, `move()` is called right before `set_parent()`.
-It is not clear if the developer intentionally avoid this idiom in line-657. 
-Given variable `parent` is a temporary variable used in function `ParseSdfJoint(...)` and it is never used after line-657,
+`C++ Copy & Move` idiom is widely used in passing intermediate values/objects efficiently.  For example, line-656 uses this idiom. 
+The causality checker believes that the expression `child->set_parent(parent)` on line-657 should instead be `child->set_parent(move(parent))`.
+The reason underlying this belief is that, in most cases in the Drake codebase, `move()` is called right before `set_parent()`.
+It is not clear if the programmer intentionally avoided using this idiom on line-657. 
+Since variable `parent` is a temporary variable used in function `ParseSdfJoint(...)`, and it is never used after line-657,
 it is quite reasonable to use this idiom as a way to improvement performance.
-Thus, line-657 is very likely a `performance bug`.
+Thus, line-657 is very likely a "performance bug".
 
-Here, we sort of use a widely used C++ idiom as our `specification` to validate the report. 
-For other reports, we do need a hand from drake developer. 
-
+Here, we used a common C++ idiom as our "specification" to validate the report.  The other reports require Drake developers to confirm or refute them.
 
 ### Condition Checker
 
