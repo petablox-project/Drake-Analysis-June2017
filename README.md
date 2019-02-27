@@ -6,7 +6,7 @@ This document presents the results of running Petablox and other state-of-the-ar
 
 We ran various checkers in four different automated static analysis tools on the Drake codebase obtained from http://drake.mit.edu/from_source.html
 
-1. Petablox: API misuse checkers (http://www.seas.upenn.edu/~mhnaik/pubs/sec16.pdf)
+1. Petablox: API misuse checkers (http://www.seas.upenn.edu/~mhnaik/papers/sec16.pdf)
 2. FB Infer: Memory safety checkers (http://FBinfer.com)
 3. MIT Kint: Integer overflow checker (http://css.csail.mit.edu/kint)
 4. Coverity: bug pattern checkers (https://scan.coverity.com)
